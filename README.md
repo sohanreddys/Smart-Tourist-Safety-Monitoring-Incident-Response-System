@@ -1,5 +1,3 @@
-<<<<<<< HEAD
-# Smart-Tourist-Safety-Monitoring-Incident-Response-System
 # Smart-Tourist-Safety-Monitoring-Incident-Response-System
 =======
 # WanderMate 🛡️
@@ -35,6 +33,13 @@ npm run dev
 cd frontend
 npm install
 npm start
+```
+
+### Mobile APP
+```bash
+cd mobile
+npm install
+npx expo start
 ```
 
 Backend runs on `http://localhost:5000`, Frontend on `http://localhost:3000`.
