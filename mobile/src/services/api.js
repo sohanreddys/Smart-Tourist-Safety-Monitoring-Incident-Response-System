@@ -2,8 +2,8 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // IMPORTANT: Change this to your computer's local IP when testing on a real device
-// e.g., 'http://192.168.1.100:5000'
-const API_BASE_URL = 'http://localhost:5000';
+// e.g., 'http://192.168.1.100:5001'
+const API_BASE_URL = 'http://localhost:5001';
 
 const api = axios.create({
   baseURL: API_BASE_URL + '/api',

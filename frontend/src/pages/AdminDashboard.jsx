@@ -52,6 +52,21 @@ const AdminDashboard = () => {
         ...prev,
       ].slice(0, 50));
     });
+    socket.on('alert:status_changed', (data) => {
+      loadAlerts();
+      if (data.status === 'resolved') {
+        setLiveAlerts((prev) => [
+          { type: 'resolved', message: 'Alert resolved by ' + data.resolvedBy, receivedAt: data.resolvedAt, userName: data.resolvedBy },
+          ...prev,
+        ].slice(0, 50));
+      }
+    });
+    socket.on('blockchain:new_id', (data) => {
+      setLiveAlerts((prev) => [
+        { type: 'blockchain', message: 'New Digital ID issued for ' + data.userName + ' (' + data.touristIdNumber + ')', receivedAt: data.issuedAt, userName: 'System' },
+        ...prev,
+      ].slice(0, 50));
+    });
     return () => disconnectSocket();
   }, [user]);
 
@@ -254,6 +269,8 @@ const AdminDashboard = () => {
                   <div key={i} className={'p-3 rounded-xl text-sm ' +
                     (a.type === 'sos' ? 'bg-red-50 border border-red-200' :
                      a.type === 'geofence' ? 'bg-yellow-50 border border-yellow-200' :
+                     a.type === 'resolved' ? 'bg-green-50 border border-green-200' :
+                     a.type === 'blockchain' ? 'bg-blue-50 border border-blue-200' :
                      'bg-purple-50 border border-purple-200')}>
                     <span className="font-medium">{a.userName || 'System'}</span>: {a.message}
                     <span className="text-xs text-gray-400 ml-2">

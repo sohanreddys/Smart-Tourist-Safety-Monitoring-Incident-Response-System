@@ -17,6 +17,7 @@ const Dashboard = () => {
   const [sosActive, setSosActive] = useState(false);
   const [alerts, setAlerts] = useState([]);
   const [services, setServices] = useState([]);
+  const [helplines, setHelplines] = useState([]);
   const [geofences, setGeofences] = useState([]);
   const [geofenceWarning, setGeofenceWarning] = useState(null);
   const [anomalies, setAnomalies] = useState([]);
@@ -165,6 +166,7 @@ const Dashboard = () => {
       const lng = location?.lng || 78.4867;
       const res = await api.get('/location/nearby-services?lat=' + lat + '&lng=' + lng);
       setServices(res.data.services || []);
+      setHelplines(res.data.nationalHelplines || []);
       renderServicesOnMap(res.data.services);
     } catch {}
   };
@@ -358,26 +360,62 @@ const Dashboard = () => {
           <div>
             <h2 className="text-lg font-bold text-gray-800 mb-4">Blockchain Digital Tourist ID</h2>
             {digitalId ? (
-              <div className="bg-gradient-to-br from-blue-800 to-blue-600 text-white rounded-2xl p-6 shadow-xl">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="text-xs text-blue-200">DIGITAL TOURIST ID</p>
-                    <h3 className="text-2xl font-bold mt-1">{digitalId.userName}</h3>
-                    <p className="text-sm text-blue-200 mt-1">{digitalId.userEmail}</p>
+              <div>
+                <div className="bg-gradient-to-br from-blue-900 via-blue-800 to-indigo-700 text-white rounded-2xl p-6 shadow-xl">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-xs text-blue-300 font-medium tracking-wider">GOVERNMENT OF INDIA - DIGITAL TOURIST ID</p>
+                      <h3 className="text-2xl font-bold mt-2">{digitalId.userName}</h3>
+                      <p className="text-sm text-blue-200 mt-1">{digitalId.userEmail}</p>
+                      {digitalId.touristIdNumber && (
+                        <p className="text-lg font-mono font-bold text-yellow-300 mt-2">{digitalId.touristIdNumber}</p>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-blue-300">Block #{digitalId.index}</p>
+                      <span className="inline-block mt-1 bg-green-500 text-white text-xs px-3 py-1 rounded-full font-bold">VERIFIED</span>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-xs text-blue-200">Block #{digitalId.index}</p>
-                    <span className="inline-block mt-1 bg-green-500 text-white text-xs px-2 py-1 rounded">VERIFIED</span>
+
+                  <div className="mt-4 pt-4 border-t border-white/20 grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-xs text-blue-300">Phone</p>
+                      <p className="text-sm font-medium">{digitalId.userPhone || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-blue-300">Issued By</p>
+                      <p className="text-sm font-medium">{digitalId.issuedBy || 'WanderMate Authority'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-blue-300">Issued On</p>
+                      <p className="text-sm font-medium">{new Date(digitalId.issuedAt).toLocaleDateString()}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-blue-300">Expires On</p>
+                      <p className="text-sm font-medium">{digitalId.expiresAt ? new Date(digitalId.expiresAt).toLocaleDateString() : 'N/A'}</p>
+                    </div>
+                  </div>
+
+                  {digitalId.verificationCode && (
+                    <div className="mt-4 pt-4 border-t border-white/20">
+                      <p className="text-xs text-blue-300">Verification Code</p>
+                      <p className="text-lg font-mono font-bold tracking-widest text-green-300">{digitalId.verificationCode}</p>
+                    </div>
+                  )}
+
+                  <div className="mt-3 pt-3 border-t border-white/10 space-y-1">
+                    <p className="text-xs font-mono text-blue-400 truncate">SHA-256: {digitalId.hash}</p>
+                    <p className="text-xs font-mono text-blue-500 truncate">Prev: {digitalId.previousHash}</p>
                   </div>
                 </div>
-                <div className="mt-4 pt-4 border-t border-white/20 space-y-1">
-                  <p className="text-xs"><span className="text-blue-300">Hash:</span> {digitalId.hash?.substring(0, 32)}...</p>
-                  <p className="text-xs"><span className="text-blue-300">Previous:</span> {digitalId.previousHash?.substring(0, 32)}...</p>
-                  <p className="text-xs"><span className="text-blue-300">Issued:</span> {new Date(digitalId.issuedAt).toLocaleString()}</p>
-                </div>
+
+                <p className="text-xs text-gray-400 mt-3 text-center">This ID is blockchain-verified and tamper-proof. Share the verification code for identity verification at checkpoints.</p>
               </div>
             ) : (
-              <button onClick={loadDigitalId} className="px-6 py-3 bg-blue-600 text-white font-bold rounded-xl">Generate Digital ID</button>
+              <div className="text-center py-8">
+                <p className="text-gray-500 mb-4">Generate your blockchain-backed Digital Tourist ID for secure identity verification across India.</p>
+                <button onClick={loadDigitalId} className="px-8 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 shadow-lg">Generate Digital ID</button>
+              </div>
             )}
           </div>
         )}
@@ -388,6 +426,23 @@ const Dashboard = () => {
               <h2 className="text-lg font-bold text-gray-800">Nearby Emergency Services</h2>
               <button onClick={loadServices} className="text-sm px-3 py-1 bg-blue-600 text-white rounded-lg">Refresh</button>
             </div>
+
+            {/* National Helplines */}
+            {helplines.length > 0 && (
+              <div className="mb-4 bg-red-50 border border-red-200 rounded-xl p-4">
+                <h3 className="font-bold text-red-800 mb-2">India Emergency Helplines</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  {helplines.map((h) => (
+                    <a key={h.id} href={'tel:' + h.phone}
+                      className="bg-white p-3 rounded-lg border border-red-100 hover:bg-red-50 text-center transition-all">
+                      <div className="text-xl font-extrabold text-red-600">{h.phone}</div>
+                      <div className="text-xs text-gray-600 mt-1">{h.name}</div>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="grid gap-3">
               {services.length === 0 ? (
                 <button onClick={loadServices} className="p-8 bg-gray-100 rounded-xl text-gray-500 hover:bg-gray-200">Click to load nearby services</button>
@@ -396,9 +451,10 @@ const Dashboard = () => {
                   <div key={s.id} className="bg-white p-4 rounded-xl border shadow-sm flex justify-between items-center">
                     <div>
                       <h4 className="font-bold text-gray-800">{s.name}</h4>
-                      <p className="text-sm text-gray-500">{s.type} - {s.distance}</p>
+                      <p className="text-sm text-gray-500">{s.type} - {s.distance}{s.city ? ' - ' + s.city : ''}</p>
+                      {s.address && <p className="text-xs text-gray-400">{s.address}</p>}
                     </div>
-                    <a href={'tel:' + s.phone} className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700">
+                    <a href={'tel:' + s.phone} className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 flex-shrink-0">
                       Call {s.phone}
                     </a>
                   </div>
