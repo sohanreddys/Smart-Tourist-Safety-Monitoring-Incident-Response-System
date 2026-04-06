@@ -21,47 +21,37 @@ const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [newFence, setNewFence] = useState({ name: '', lat: '', lng: '', radius: 500, riskLevel: 'medium', description: '' });
 
-  // Socket.io for real-time
   useEffect(() => {
     if (!user) return;
     const socket = connectSocket(user);
-
     socket.on('sos:received', (alertData) => {
       setLiveAlerts((prev) => [alertData, ...prev].slice(0, 50));
       loadAlerts();
       playAlertSound();
     });
-
-    socket.on('location:live', (data) => {
-      updateUserOnMap(data);
-    });
-
+    socket.on('location:live', (data) => { updateUserOnMap(data); });
     socket.on('user:online', (userData) => {
       setOnlineUsers((prev) => {
         const filtered = prev.filter((u) => u.id !== userData.id);
         return [...filtered, userData];
       });
     });
-
     socket.on('user:offline', (data) => {
       setOnlineUsers((prev) => prev.filter((u) => u.id !== data.userId));
       removeUserFromMap(data.userId);
     });
-
     socket.on('geofence:alert', (data) => {
       setLiveAlerts((prev) => [
         { ...data, type: 'geofence', message: 'Geofence violation: ' + data.userName + ' entered ' + data.geofence },
         ...prev,
       ].slice(0, 50));
     });
-
     socket.on('anomaly:alert', (data) => {
       setLiveAlerts((prev) => [
         { ...data, type: 'anomaly', message: 'Anomaly detected for ' + data.userName },
         ...prev,
       ].slice(0, 50));
     });
-
     return () => disconnectSocket();
   }, [user]);
 
@@ -79,7 +69,6 @@ const AdminDashboard = () => {
     } catch (e) {}
   };
 
-  // Initialize map
   useEffect(() => {
     if (activeTab !== 'map' || !mapRef.current || mapInstance.current) return;
     const L = window.L;
@@ -164,10 +153,7 @@ const AdminDashboard = () => {
   };
 
   const resolveAlert = async (alertId) => {
-    try {
-      await api.patch('/alerts/' + alertId + '/resolve');
-      loadAlerts();
-    } catch (e) {}
+    try { await api.patch('/alerts/' + alertId + '/resolve'); loadAlerts(); } catch (e) {}
   };
 
   const createGeofence = async (e) => {
@@ -180,10 +166,7 @@ const AdminDashboard = () => {
   };
 
   const deleteGeofence = async (id) => {
-    try {
-      await api.delete('/geofence/' + id);
-      loadGeofences();
-    } catch (e) {}
+    try { await api.delete('/geofence/' + id); loadGeofences(); } catch (e) {}
   };
 
   const renderGeofencesOnMap = (fences) => {
@@ -209,7 +192,6 @@ const AdminDashboard = () => {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      {/* Nav */}
       <nav className="bg-gray-900 text-white shadow-lg">
         <div className="max-w-full mx-auto px-4 flex items-center justify-between h-14">
           <div className="flex items-center space-x-2">
@@ -222,14 +204,12 @@ const AdminDashboard = () => {
         </div>
       </nav>
 
-      {/* Live SOS Banner */}
       {liveAlerts.length > 0 && liveAlerts[0].type === 'sos' && (
         <div className="bg-red-600 text-white px-4 py-3 text-center font-bold animate-pulse">
           LIVE SOS: {liveAlerts[0].userName} triggered emergency! — Lat: {liveAlerts[0].lat?.toFixed(4)}, Lng: {liveAlerts[0].lng?.toFixed(4)}
         </div>
       )}
 
-      {/* Tabs */}
       <div className="bg-white border-b shadow-sm">
         <div className="max-w-full mx-auto px-4 flex space-x-1 overflow-x-auto">
           {[
@@ -250,7 +230,6 @@ const AdminDashboard = () => {
       </div>
 
       <div className="max-w-full mx-auto px-4 py-4">
-        {/* OVERVIEW */}
         {activeTab === 'overview' && (
           <div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -287,7 +266,6 @@ const AdminDashboard = () => {
           </div>
         )}
 
-        {/* LIVE MAP */}
         {activeTab === 'map' && (
           <div>
             <div ref={mapRef} style={{ width: '100%', height: '500px' }} className="rounded-2xl shadow-lg border border-gray-200" />
@@ -299,7 +277,6 @@ const AdminDashboard = () => {
           </div>
         )}
 
-        {/* ALERTS */}
         {activeTab === 'alerts' && (
           <div className="space-y-3">
             <div className="flex justify-between items-center">
@@ -343,7 +320,6 @@ const AdminDashboard = () => {
           </div>
         )}
 
-        {/* GEOFENCES */}
         {activeTab === 'geofences' && (
           <div>
             <h2 className="text-lg font-bold text-gray-800 mb-4">Geofence Management</h2>
@@ -388,7 +364,6 @@ const AdminDashboard = () => {
           </div>
         )}
 
-        {/* BLOCKCHAIN */}
         {activeTab === 'blockchain' && (
           <div>
             <div className="flex justify-between items-center mb-4">
@@ -421,7 +396,6 @@ const AdminDashboard = () => {
           </div>
         )}
 
-        {/* ACTIVITY LOG */}
         {activeTab === 'logs' && (
           <div>
             <h2 className="text-lg font-bold text-gray-800 mb-4">All Activity Log</h2>

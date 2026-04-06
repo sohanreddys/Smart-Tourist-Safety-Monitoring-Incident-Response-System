@@ -3,7 +3,6 @@ import * as Battery from 'expo-battery';
 import * as Network from 'expo-network';
 import * as Location from 'expo-location';
 
-// Collects all device details on login
 export const collectDeviceInfo = async () => {
   const info = {
     device: {
@@ -12,7 +11,7 @@ export const collectDeviceInfo = async () => {
       osName: Device.osName,
       osVersion: Device.osVersion,
       deviceName: Device.deviceName,
-      isDevice: Device.isDevice, // false if emulator
+      isDevice: Device.isDevice,
       totalMemory: Device.totalMemory,
     },
     battery: {},
@@ -20,7 +19,6 @@ export const collectDeviceInfo = async () => {
     location: null,
   };
 
-  // Battery
   try {
     const batteryLevel = await Battery.getBatteryLevelAsync();
     const batteryState = await Battery.getBatteryStateAsync();
@@ -32,7 +30,6 @@ export const collectDeviceInfo = async () => {
     info.battery = { level: null, charging: null };
   }
 
-  // Network
   try {
     const networkState = await Network.getNetworkStateAsync();
     const ip = await Network.getIpAddressAsync();
@@ -46,7 +43,6 @@ export const collectDeviceInfo = async () => {
     info.network = { isConnected: null, type: null };
   }
 
-  // Location
   try {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status === 'granted') {

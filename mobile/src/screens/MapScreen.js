@@ -23,15 +23,11 @@ const MapScreen = () => {
   const [showServices, setShowServices] = useState(false);
   const [offlineCount, setOfflineCount] = useState(0);
 
-  // Socket + location tracking
   useEffect(() => {
-    if (user) {
-      connectSocket(user);
-    }
+    if (user) { connectSocket(user); }
     return () => disconnectSocket();
   }, [user]);
 
-  // Watch location
   useEffect(() => {
     let subscription;
     (async () => {
@@ -40,16 +36,12 @@ const MapScreen = () => {
         Alert.alert('Permission Denied', 'Location permission is required for WanderMate to work.');
         return;
       }
-
       subscription = await Location.watchPositionAsync(
         { accuracy: Location.Accuracy.High, distanceInterval: 10, timeInterval: 10000 },
         (loc) => {
           const pos = {
-            lat: loc.coords.latitude,
-            lng: loc.coords.longitude,
-            accuracy: loc.coords.accuracy,
-            speed: loc.coords.speed,
-            heading: loc.coords.heading,
+            lat: loc.coords.latitude, lng: loc.coords.longitude,
+            accuracy: loc.coords.accuracy, speed: loc.coords.speed, heading: loc.coords.heading,
           };
           setLocation(pos);
           sendLocationToServer(pos);
@@ -57,11 +49,9 @@ const MapScreen = () => {
         }
       );
     })();
-
     return () => { if (subscription) subscription.remove(); };
   }, []);
 
-  // Load geofences
   useEffect(() => {
     loadGeofences();
     checkOfflineQueue();
@@ -88,9 +78,7 @@ const MapScreen = () => {
       if (!net.isConnected) return;
       await api.post('/location/update', loc);
       const socket = getSocket();
-      if (socket) {
-        socket.emit('location:update', { userId: user.id, userName: user.name, ...loc });
-      }
+      if (socket) { socket.emit('location:update', { userId: user.id, userName: user.name, ...loc }); }
     } catch (e) {}
   };
 
@@ -114,17 +102,12 @@ const MapScreen = () => {
             });
           }
         }
-      } else {
-        setGeofenceWarning(null);
-      }
+      } else { setGeofenceWarning(null); }
     } catch (e) {}
   };
 
   const loadGeofences = async () => {
-    try {
-      const res = await api.get('/geofence');
-      setGeofences(res.data.geofences || []);
-    } catch (e) {}
+    try { const res = await api.get('/geofence'); setGeofences(res.data.geofences || []); } catch (e) {}
   };
 
   const loadNearbyServices = async () => {
@@ -137,26 +120,19 @@ const MapScreen = () => {
     } catch (e) {}
   };
 
-  // SOS HANDLER
   const handleSOS = async () => {
     setSosActive(true);
     Vibration.vibrate([0, 300, 100, 300, 100, 300]);
-
     const alertData = {
-      type: 'sos',
-      message: 'Emergency SOS triggered from mobile!',
-      lat: location?.lat,
-      lng: location?.lng,
+      type: 'sos', message: 'Emergency SOS triggered from mobile!',
+      lat: location?.lat, lng: location?.lng,
     };
-
     const net = await Network.getNetworkStateAsync();
     if (net.isConnected) {
       try {
         await api.post('/alerts/sos', alertData);
         const socket = getSocket();
-        if (socket) {
-          socket.emit('sos:trigger', { ...alertData, userId: user.id, userName: user.name });
-        }
+        if (socket) { socket.emit('sos:trigger', { ...alertData, userId: user.id, userName: user.name }); }
         await api.post('/blockchain/log', {
           action: 'SOS_TRIGGERED_MOBILE',
           details: 'SOS from ' + (location?.lat?.toFixed(4)) + ', ' + (location?.lng?.toFixed(4)),
@@ -172,66 +148,46 @@ const MapScreen = () => {
       setOfflineCount(queue.length);
       Alert.alert('Offline SOS', 'No internet. Alert saved locally and will sync when connected.');
     }
-
     setTimeout(() => setSosActive(false), 3000);
   };
 
   const region = location ? {
-    latitude: location.lat,
-    longitude: location.lng,
-    latitudeDelta: 0.02,
-    longitudeDelta: 0.02,
+    latitude: location.lat, longitude: location.lng, latitudeDelta: 0.02, longitudeDelta: 0.02,
   } : {
-    latitude: 17.385,
-    longitude: 78.4867,
-    latitudeDelta: 0.05,
-    longitudeDelta: 0.05,
+    latitude: 17.385, longitude: 78.4867, latitudeDelta: 0.05, longitudeDelta: 0.05,
   };
 
   return (
     <View style={styles.container}>
-      {/* Geofence Warning Banner */}
       {geofenceWarning && (
         <View style={styles.warningBanner}>
           <Text style={styles.warningText}>WARNING: Inside {geofenceWarning.name} (Risk: {geofenceWarning.riskLevel})</Text>
         </View>
       )}
-
-      {/* Offline Banner */}
       {offlineCount > 0 && (
         <View style={styles.offlineBanner}>
           <Text style={styles.offlineText}>{offlineCount} offline alert(s) pending sync</Text>
         </View>
       )}
-
-      {/* Map */}
       <MapView ref={mapRef} style={styles.map} provider={PROVIDER_DEFAULT} initialRegion={region}
         showsUserLocation showsMyLocationButton>
-
-        {/* Geofence circles */}
         {geofences.map((f) => (
           <Circle key={f.id} center={{ latitude: f.lat, longitude: f.lng }} radius={f.radius}
             strokeColor={f.riskLevel === 'high' ? '#ef4444' : f.riskLevel === 'medium' ? '#f59e0b' : '#3b82f6'}
             fillColor={f.riskLevel === 'high' ? 'rgba(239,68,68,0.15)' : f.riskLevel === 'medium' ? 'rgba(245,158,11,0.15)' : 'rgba(59,130,246,0.15)'}
             strokeWidth={2} />
         ))}
-
-        {/* Geofence labels */}
         {geofences.map((f) => (
           <Marker key={'label-' + f.id} coordinate={{ latitude: f.lat, longitude: f.lng }}
             title={f.name} description={f.riskLevel + ' risk — ' + f.description}
             pinColor={f.riskLevel === 'high' ? 'red' : f.riskLevel === 'medium' ? 'orange' : 'blue'} />
         ))}
-
-        {/* Nearby services */}
         {showServices && services.map((s) => (
           <Marker key={'svc-' + s.id} coordinate={{ latitude: s.lat, longitude: s.lng }}
             title={s.name} description={s.type + ' — ' + s.phone + ' — ' + s.distance}
             pinColor="green" />
         ))}
       </MapView>
-
-      {/* Bottom Controls */}
       <View style={styles.controls}>
         <View style={styles.buttonRow}>
           <TouchableOpacity style={styles.btnServices} onPress={loadNearbyServices}>
@@ -241,17 +197,10 @@ const MapScreen = () => {
             <Text style={styles.btnSmallText}>Risk Zones</Text>
           </TouchableOpacity>
         </View>
-
-        {/* SOS BUTTON */}
-        <TouchableOpacity
-          style={[styles.sosButton, sosActive && styles.sosDisabled]}
-          onPress={handleSOS}
-          disabled={sosActive}
-          activeOpacity={0.7}
-        >
+        <TouchableOpacity style={[styles.sosButton, sosActive && styles.sosDisabled]} onPress={handleSOS}
+          disabled={sosActive} activeOpacity={0.7}>
           <Text style={styles.sosText}>{sosActive ? 'SOS SENT!' : 'SOS EMERGENCY'}</Text>
         </TouchableOpacity>
-
         {location && (
           <Text style={styles.coordsText}>
             {location.lat.toFixed(6)}, {location.lng.toFixed(6)} | ±{Math.round(location.accuracy || 0)}m

@@ -14,7 +14,6 @@ import ProfileScreen from './src/screens/ProfileScreen';
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
-// Tab icon helper
 const TabIcon = ({ label, focused }) => {
   const icons = { Map: '📍', Alerts: '🚨', Profile: '👤' };
   return (
@@ -27,7 +26,6 @@ const TabIcon = ({ label, focused }) => {
   );
 };
 
-// Main app tabs (after login)
 const MainTabs = () => (
   <Tab.Navigator
     screenOptions={({ route }) => ({
@@ -50,7 +48,6 @@ const MainTabs = () => (
   </Tab.Navigator>
 );
 
-// Auth stack (login/register)
 const AuthStack = () => (
   <Stack.Navigator screenOptions={{ headerShown: false }}>
     <Stack.Screen name="Login" component={LoginScreen} />
@@ -58,7 +55,6 @@ const AuthStack = () => (
   </Stack.Navigator>
 );
 
-// Root navigator — switches based on auth state
 const RootNavigator = () => {
   const { isAuthenticated, loading } = useAuth();
 

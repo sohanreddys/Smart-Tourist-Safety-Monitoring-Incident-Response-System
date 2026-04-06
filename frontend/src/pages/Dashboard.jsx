@@ -26,7 +26,6 @@ const Dashboard = () => {
   const [resolvedNotif, setResolvedNotif] = useState(null);
   const [activeTab, setActiveTab] = useState('map');
 
-  // Initialize socket
   useEffect(() => {
     if (user) {
       const socket = connectSocket(user);
@@ -42,7 +41,6 @@ const Dashboard = () => {
     return () => disconnectSocket();
   }, [user]);
 
-  // Network status listener
   useEffect(() => {
     const handleOnline = async () => {
       setNetworkStatus(true);
@@ -62,22 +60,18 @@ const Dashboard = () => {
     };
   }, []);
 
-  // Initialize Leaflet map
   useEffect(() => {
     if (!mapRef.current || mapInstance.current) return;
     const L = window.L;
     if (!L) return;
-
     const map = L.map(mapRef.current).setView([17.385, 78.4867], 14);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors',
     }).addTo(map);
-
     mapInstance.current = map;
     return () => { map.remove(); mapInstance.current = null; };
   }, [activeTab]);
 
-  // Watch user location
   useEffect(() => {
     if (!navigator.geolocation) return;
     const watchId = navigator.geolocation.watchPosition(
@@ -253,7 +247,6 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Top Nav */}
       <nav className="bg-blue-800 text-white shadow-lg">
         <div className="max-w-7xl mx-auto px-4 flex items-center justify-between h-14">
           <div className="flex items-center space-x-2">
@@ -268,26 +261,22 @@ const Dashboard = () => {
         </div>
       </nav>
 
-      {/* Geofence Warning */}
       {geofenceWarning && (
         <div className="bg-red-600 text-white px-4 py-3 text-center font-medium animate-pulse">
           WARNING: You are inside a restricted zone — <b>{geofenceWarning.name}</b> (Risk: {geofenceWarning.riskLevel})
         </div>
       )}
 
-      {/* Resolved Notification */}
       {resolvedNotif && (
         <div className="bg-green-600 text-white px-4 py-3 text-center font-medium">{resolvedNotif}</div>
       )}
 
-      {/* Offline Count */}
       {offlineCount > 0 && (
         <div className="bg-yellow-500 text-white px-4 py-2 text-center text-sm">
           {offlineCount} offline alert(s) pending sync. Will sync when back online.
         </div>
       )}
 
-      {/* Tab Navigation */}
       <div className="bg-white border-b shadow-sm">
         <div className="max-w-7xl mx-auto px-4 flex space-x-1 overflow-x-auto">
           {[
@@ -306,7 +295,6 @@ const Dashboard = () => {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-4">
-        {/* SOS Button */}
         <div className="mb-4">
           <button onClick={handleSOS} disabled={sosActive}
             className={'w-full py-4 rounded-2xl text-white text-xl font-extrabold shadow-lg transition-all ' +
@@ -315,7 +303,6 @@ const Dashboard = () => {
           </button>
         </div>
 
-        {/* MAP Tab */}
         {activeTab === 'map' && (
           <div>
             <div ref={mapRef} className="w-full h-96 rounded-2xl shadow-lg border border-gray-200 z-0" />
@@ -343,7 +330,6 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* ALERTS Tab */}
         {activeTab === 'alerts' && (
           <div className="space-y-3">
             <h2 className="text-lg font-bold text-gray-800">Your Alerts</h2>
@@ -368,7 +354,6 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* DIGITAL ID Tab */}
         {activeTab === 'id' && (
           <div>
             <h2 className="text-lg font-bold text-gray-800 mb-4">Blockchain Digital Tourist ID</h2>
@@ -397,7 +382,6 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* SERVICES Tab */}
         {activeTab === 'services' && (
           <div>
             <div className="flex justify-between items-center mb-4">

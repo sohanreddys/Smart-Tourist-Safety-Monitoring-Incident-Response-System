@@ -13,7 +13,6 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [deviceInfo, setDeviceInfo] = useState(null);
 
-  // Restore session on app launch
   useEffect(() => {
     (async () => {
       try {
@@ -22,7 +21,6 @@ export const AuthProvider = ({ children }) => {
         if (savedToken && savedUser) {
           setToken(savedToken);
           setUser(JSON.parse(savedUser));
-          // Collect device info on session restore too
           const info = await collectDeviceInfo();
           setDeviceInfo(info);
         }
@@ -42,11 +40,9 @@ export const AuthProvider = ({ children }) => {
     await AsyncStorage.setItem('wandermate_token', newToken);
     await AsyncStorage.setItem('wandermate_user', JSON.stringify(userData));
 
-    // Collect full device info on login
     const info = await collectDeviceInfo();
     setDeviceInfo(info);
 
-    // Log device info to blockchain
     try {
       await api.post('/blockchain/log', {
         action: 'DEVICE_LOGIN',
@@ -56,12 +52,10 @@ export const AuthProvider = ({ children }) => {
           battery: info.battery.level + '%',
           network: info.network.type,
           ip: info.network.ipAddress,
-          location: info.location ? `${info.location.lat.toFixed(4)}, ${info.location.lng.toFixed(4)}` : 'unavailable',
+          location: info.location ? info.location.lat.toFixed(4) + ', ' + info.location.lng.toFixed(4) : 'unavailable',
         }),
       });
-    } catch (e) {
-      // Non-critical, don't block login
-    }
+    } catch (e) {}
 
     return userData;
   };
@@ -74,14 +68,10 @@ export const AuthProvider = ({ children }) => {
     await AsyncStorage.setItem('wandermate_token', newToken);
     await AsyncStorage.setItem('wandermate_user', JSON.stringify(userData));
 
-    // Collect device info
     const info = await collectDeviceInfo();
     setDeviceInfo(info);
 
-    // Auto-generate blockchain digital ID
-    try {
-      await api.post('/blockchain/digital-id');
-    } catch (e) {}
+    try { await api.post('/blockchain/digital-id'); } catch (e) {}
 
     return userData;
   };
@@ -95,13 +85,8 @@ export const AuthProvider = ({ children }) => {
   };
 
   const value = {
-    user,
-    token,
-    loading,
-    deviceInfo,
-    login,
-    register,
-    logout,
+    user, token, loading, deviceInfo,
+    login, register, logout,
     isAuthenticated: !!token,
   };
 

@@ -1,7 +1,7 @@
 {
   "name": "wandermate-backend",
   "version": "1.0.0",
-  "description": "WanderMate - Smart Tourist Safety Monitoring & Incident Response System",
+  "description": "WanderMate Backend API",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",

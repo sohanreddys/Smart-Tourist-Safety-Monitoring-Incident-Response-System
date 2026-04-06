@@ -11,15 +11,10 @@ const ProfileScreen = () => {
   const [digitalId, setDigitalId] = useState(null);
   const [freshDeviceInfo, setFreshDeviceInfo] = useState(deviceInfo);
 
-  useEffect(() => {
-    loadDigitalId();
-  }, []);
+  useEffect(() => { loadDigitalId(); }, []);
 
   const loadDigitalId = async () => {
-    try {
-      const res = await api.post('/blockchain/digital-id');
-      setDigitalId(res.data.digitalId);
-    } catch (e) {}
+    try { const res = await api.post('/blockchain/digital-id'); setDigitalId(res.data.digitalId); } catch (e) {}
   };
 
   const refreshDeviceInfo = async () => {
@@ -39,7 +34,6 @@ const ProfileScreen = () => {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.scroll}>
-      {/* User Card */}
       <View style={styles.userCard}>
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>{user?.name?.[0]?.toUpperCase() || 'U'}</Text>
@@ -51,7 +45,6 @@ const ProfileScreen = () => {
         </View>
       </View>
 
-      {/* Digital ID Card */}
       {digitalId && (
         <View style={styles.idCard}>
           <Text style={styles.sectionLabel}>BLOCKCHAIN DIGITAL ID</Text>
@@ -75,7 +68,6 @@ const ProfileScreen = () => {
         </View>
       )}
 
-      {/* Device Info */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Device Details</Text>
@@ -122,7 +114,6 @@ const ProfileScreen = () => {
         )}
       </View>
 
-      {/* Logout */}
       <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
         <Text style={styles.logoutText}>Sign Out</Text>
       </TouchableOpacity>

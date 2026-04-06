@@ -9,10 +9,7 @@ const AlertsScreen = () => {
   const [refreshing, setRefreshing] = useState(false);
 
   const loadAlerts = async () => {
-    try {
-      const res = await api.get('/alerts');
-      setAlerts(res.data.alerts || []);
-    } catch (e) {}
+    try { const res = await api.get('/alerts'); setAlerts(res.data.alerts || []); } catch (e) {}
   };
 
   useEffect(() => { loadAlerts(); }, []);

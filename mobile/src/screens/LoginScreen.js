@@ -18,7 +18,6 @@ const LoginScreen = ({ navigation }) => {
     setLoading(true);
     try {
       await login(email, password);
-      // Navigation handled by App.js auth state
     } catch (err) {
       Alert.alert('Login Failed', err.response?.data?.error || 'Invalid credentials');
     } finally {
@@ -37,23 +36,10 @@ const LoginScreen = ({ navigation }) => {
         <View style={styles.card}>
           <Text style={styles.title}>Sign In</Text>
 
-          <TextInput
-            style={styles.input}
-            placeholder="Email"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            placeholderTextColor="#9ca3af"
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Password"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            placeholderTextColor="#9ca3af"
-          />
+          <TextInput style={styles.input} placeholder="Email" value={email} onChangeText={setEmail}
+            keyboardType="email-address" autoCapitalize="none" placeholderTextColor="#9ca3af" />
+          <TextInput style={styles.input} placeholder="Password" value={password} onChangeText={setPassword}
+            secureTextEntry placeholderTextColor="#9ca3af" />
 
           <TouchableOpacity style={[styles.button, loading && styles.buttonDisabled]} onPress={handleLogin} disabled={loading}>
             <Text style={styles.buttonText}>{loading ? 'Signing In...' : 'Sign In'}</Text>

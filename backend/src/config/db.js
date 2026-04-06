@@ -1,6 +1,3 @@
-// In-memory database for development
-// Replace with MongoDB/PostgreSQL in production
-
 const db = {
   users: [],
   locations: [],
