@@ -64,6 +64,33 @@ async function seedAdmins() {
     { name: 'Admin Five', email: 'admin5@wandermate.com', password: 'admin5', phone: '+91-9000000005' },
   ];
 
+  const departmentAccounts = [
+    { name: 'City Hospital ER',      email: 'medical@wandermate.com',  password: 'medical1',  role: 'medical',  department: 'City Hospital Emergency Room' },
+    { name: 'Central Police HQ',     email: 'police@wandermate.com',   password: 'police1',   role: 'police',   department: 'Central Police Headquarters' },
+    { name: 'Metro Fire Station',    email: 'fire@wandermate.com',     password: 'fire1',     role: 'fire',     department: 'Metro Fire & Rescue' },
+    { name: 'Disaster Response Unit',email: 'disaster@wandermate.com', password: 'disaster1', role: 'disaster', department: 'State Disaster Management' },
+  ];
+
+  for (const dept of departmentAccounts) {
+    try {
+      const salt = await bcrypt.genSalt(10);
+      const hashed = await bcrypt.hash(dept.password, salt);
+      await User.findOneAndUpdate(
+        { email: dept.email },
+        {
+          $set: {
+            name: dept.name, password: hashed,
+            role: dept.role, department: dept.department, profileCompleted: true,
+          },
+        },
+        { upsert: true, new: true }
+      );
+      console.log('Ensured ' + dept.role + ' account:', dept.email, '/ password:', dept.password);
+    } catch (err) {
+      if (err.code !== 11000) console.error('Dept seed error', dept.email, err.message);
+    }
+  }
+
   for (const admin of defaultAdmins) {
     try {
       const exists = await User.findOne({ email: admin.email });

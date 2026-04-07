@@ -5,7 +5,8 @@ const userSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true, lowercase: true, trim: true },
   password: { type: String, required: true },
   phone: { type: String, default: '' },
-  role: { type: String, enum: ['tourist', 'admin'], default: 'tourist' },
+  role: { type: String, enum: ['tourist', 'admin', 'medical', 'police', 'fire', 'disaster'], default: 'tourist' },
+  department: { type: String, default: '' }, // human-readable: "City Hospital", "Central Police HQ", etc.
   // Extended profile fields
   nationality: { type: String, default: '' },
   passportNumber: { type: String, default: '' },

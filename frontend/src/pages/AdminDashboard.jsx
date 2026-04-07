@@ -22,6 +22,7 @@ const AdminDashboard = () => {
   const [newFence, setNewFence] = useState({ name: '', lat: '', lng: '', radius: 500, riskLevel: 'medium', description: '' });
   const [selectedAlert, setSelectedAlert] = useState(null);
   const [alertEvidence, setAlertEvidence] = useState([]);
+  const selectedAlertRef = useRef(null);
 
   useEffect(() => {
     if (!user) return;
@@ -66,8 +67,8 @@ const AdminDashboard = () => {
         { type: 'evidence', message: 'Evidence clip #' + data.clipIndex + ' uploaded by ' + data.userName + ' (' + data.cameraType + ' cam)', receivedAt: data.uploadedAt, userName: data.userName },
         ...prev,
       ].slice(0, 50));
-      // Refresh evidence if viewing that alert
-      if (selectedAlert && selectedAlert.id === data.alertId) {
+      // Use ref so the closure always sees the current selected alert
+      if (selectedAlertRef.current && selectedAlertRef.current.id === data.alertId) {
         loadEvidence(data.alertId);
       }
     });
@@ -189,12 +190,24 @@ const AdminDashboard = () => {
 
   const viewAlertDetails = async (alert) => {
     setSelectedAlert(alert);
+    selectedAlertRef.current = alert;
     await loadEvidence(alert.id);
     setActiveTab('alert-detail');
   };
 
   const resolveAlert = async (alertId) => {
     try { await api.patch('/alerts/' + alertId + '/resolve'); loadAlerts(); } catch (e) {}
+  };
+
+  const assignAlert = async (alertId, role) => {
+    try {
+      await api.post('/alerts/' + alertId + '/assign', { role });
+      loadAlerts();
+      if (selectedAlert && selectedAlert.id === alertId) {
+        const r = await api.get('/alerts/' + alertId);
+        setSelectedAlert(r.data.alert);
+      }
+    } catch (e) { alert('Failed to assign: ' + (e.response?.data?.error || e.message)); }
   };
 
   const createGeofence = async (e) => {
@@ -474,6 +487,25 @@ const AdminDashboard = () => {
                     <button onClick={() => loadEvidence(selectedAlert.id)}
                       className="text-sm px-3 py-1 bg-blue-600 text-white rounded-lg">Refresh</button>
                   </div>
+                  <div className="mb-4 p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
+                    <p className="text-xs font-bold text-indigo-900 mb-2">ASSIGN TO DEPARTMENT</p>
+                    {selectedAlert?.assignedRole ? (
+                      <p className="text-xs text-indigo-700 mb-2">
+                        Currently assigned to: <span className="font-bold uppercase">{selectedAlert.assignedRole}</span>
+                        {selectedAlert.assignedBy ? ' by ' + selectedAlert.assignedBy : ''}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-indigo-600 mb-2">Not yet assigned.</p>
+                    )}
+                    <div className="flex flex-wrap gap-2">
+                      {['medical', 'police', 'fire', 'disaster'].map((r) => (
+                        <button key={r} onClick={() => assignAlert(selectedAlert.id, r)}
+                          className="text-xs font-bold px-3 py-1.5 rounded bg-white border border-indigo-300 hover:bg-indigo-100 uppercase">
+                          {r === 'medical' ? '🏥 Medical' : r === 'police' ? '👮 Police' : r === 'fire' ? '🚒 Fire' : '🌪️ Disaster'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   {alertEvidence.length === 0 ? (
                     <p className="text-gray-500 text-sm">No evidence uploaded yet.</p>
                   ) : (
@@ -490,13 +522,13 @@ const AdminDashboard = () => {
                           </div>
                           {ev.type === 'video' && (
                             <video controls className="w-full rounded-lg mb-2" style={{ maxHeight: '200px' }}>
-                              <source src={api.defaults.baseURL.replace('/api', '') + ev.url} type={ev.mimeType || 'video/mp4'} />
+                              <source src={api.defaults.baseURL.replace('/api', '') + ev.url + '?token=' + encodeURIComponent(localStorage.getItem('wandermate_token') || '')} type={ev.mimeType || 'video/mp4'} />
                               Your browser does not support video playback.
                             </video>
                           )}
                           {ev.type === 'audio' && (
                             <audio controls className="w-full mb-2">
-                              <source src={api.defaults.baseURL.replace('/api', '') + ev.url} type={ev.mimeType || 'audio/mpeg'} />
+                              <source src={api.defaults.baseURL.replace('/api', '') + ev.url + '?token=' + encodeURIComponent(localStorage.getItem('wandermate_token') || '')} type={ev.mimeType || 'audio/mpeg'} />
                             </audio>
                           )}
                           <div className="text-xs text-gray-400 flex justify-between">

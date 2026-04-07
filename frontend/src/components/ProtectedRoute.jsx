@@ -6,7 +6,13 @@ const ProtectedRoute = ({ children, requiredRole }) => {
   const { isAuthenticated, user, loading } = useAuth();
   if (loading) return <div style={{display:'flex',justifyContent:'center',alignItems:'center',height:'100vh'}}><p>Loading...</p></div>;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
-  if (requiredRole && user?.role !== requiredRole) return <Navigate to="/dashboard" replace />;
+  // Admin route also accessible to responder departments (filtered views handled server-side)
+  const RESPONDER_ROLES = ['admin', 'medical', 'police', 'fire', 'disaster'];
+  if (requiredRole === 'admin') {
+    if (!RESPONDER_ROLES.includes(user?.role)) return <Navigate to="/dashboard" replace />;
+  } else if (requiredRole && user?.role !== requiredRole) {
+    return <Navigate to="/dashboard" replace />;
+  }
   return children;
 };
 

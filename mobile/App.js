@@ -47,29 +47,36 @@ const TabIcon = ({ label, focused }) => {
   );
 };
 
-const MainTabs = () => (
-  <Tab.Navigator
-    screenOptions={({ route }) => ({
-      headerShown: false,
-      tabBarIcon: ({ focused }) => <TabIcon label={route.name} focused={focused} />,
-      tabBarShowLabel: false,
-      tabBarStyle: {
-        height: 72,
-        paddingTop: 8,
-        paddingBottom: 14,
-        backgroundColor: '#fff',
-        borderTopWidth: 1,
-        borderTopColor: '#e5e7eb',
-      },
-    })}
-  >
-    <Tab.Screen name="Map" component={MapScreen} />
-    <Tab.Screen name="Services" component={EmergencyServicesScreen} />
-    <Tab.Screen name="SOS" component={SOSScreen} />
-    <Tab.Screen name="Alerts" component={AlertsScreen} />
-    <Tab.Screen name="Profile" component={ProfileScreen} />
-  </Tab.Navigator>
-);
+const RESPONDER_ROLES = ['admin', 'medical', 'police', 'fire', 'disaster'];
+
+const MainTabs = () => {
+  const { user } = useAuth();
+  const isResponder = user && RESPONDER_ROLES.includes(user.role);
+
+  return (
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarIcon: ({ focused }) => <TabIcon label={route.name} focused={focused} />,
+        tabBarShowLabel: false,
+        tabBarStyle: {
+          height: 72,
+          paddingTop: 8,
+          paddingBottom: 14,
+          backgroundColor: '#fff',
+          borderTopWidth: 1,
+          borderTopColor: '#e5e7eb',
+        },
+      })}
+    >
+      <Tab.Screen name="Map" component={MapScreen} />
+      <Tab.Screen name="Services" component={EmergencyServicesScreen} />
+      {!isResponder && <Tab.Screen name="SOS" component={SOSScreen} />}
+      <Tab.Screen name="Alerts" component={AlertsScreen} />
+      <Tab.Screen name="Profile" component={ProfileScreen} />
+    </Tab.Navigator>
+  );
+};
 
 const AuthStack = () => (
   <Stack.Navigator screenOptions={{ headerShown: false }}>

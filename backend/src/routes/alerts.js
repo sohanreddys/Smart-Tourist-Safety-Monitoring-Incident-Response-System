@@ -110,12 +110,63 @@ router.post('/:id/cancel', auth, async (req, res) => {
 
 router.get('/', auth, async (req, res) => {
   try {
-    const query = req.user.role === 'admin' ? {} : { userId: req.user.id };
+    let query;
+    if (req.user.role === 'admin') {
+      query = {}; // main admin sees everything
+    } else if (['medical', 'police', 'fire', 'disaster'].includes(req.user.role)) {
+      // department responders see only cases assigned to their role/them
+      query = { $or: [{ assignedRole: req.user.role }, { assignedTo: req.user.id }] };
+    } else {
+      query = { userId: req.user.id };
+    }
     const alerts = await Alert.find(query).sort({ createdAt: -1 }).limit(200).lean();
     const mapped = alerts.map(a => ({ ...a, id: a._id.toString() }));
     res.json({ alerts: mapped });
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch alerts' });
+  }
+});
+
+// Main admin: assign an alert to a department / responder
+router.post('/:id/assign', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+    const { role, userId, note } = req.body;
+    if (!['medical', 'police', 'fire', 'disaster'].includes(role)) {
+      return res.status(400).json({ error: 'Invalid role' });
+    }
+    const alert = await Alert.findById(req.params.id);
+    if (!alert) return res.status(404).json({ error: 'Alert not found' });
+    alert.assignedRole = role;
+    alert.assignedTo = userId || null;
+    alert.assignedAt = new Date();
+    alert.assignedBy = req.user.name;
+    alert.assignmentNote = note || '';
+    await alert.save();
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to('admins').emit('alert:assigned', {
+        alertId: alert._id.toString(), role, userId, assignedBy: req.user.name,
+      });
+      // Notify any responder of that role
+      io.emit('alert:assigned:' + role, { alertId: alert._id.toString() });
+    }
+    res.json({ success: true, alert: { ...alert.toObject(), id: alert._id.toString() } });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to assign' });
+  }
+});
+
+// Department responder: list responders by role (for admin assign UI)
+router.get('/responders/list', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+    const users = await User.find({ role: { $in: ['medical', 'police', 'fire', 'disaster'] } })
+      .select('-password').lean();
+    res.json({ responders: users.map(u => ({ ...u, id: u._id.toString() })) });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed' });
   }
 });
 
@@ -136,9 +187,16 @@ router.get('/:id', auth, async (req, res) => {
 
 router.patch('/:id/resolve', auth, async (req, res) => {
   try {
-    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
+    const responderRoles = ['admin', 'medical', 'police', 'fire', 'disaster'];
+    if (!responderRoles.includes(req.user.role)) return res.status(403).json({ error: 'Responder access required' });
     const alert = await Alert.findById(req.params.id);
     if (!alert) return res.status(404).json({ error: 'Alert not found' });
+    // Department responders may only resolve alerts assigned to them/their role
+    if (req.user.role !== 'admin') {
+      if (alert.assignedRole !== req.user.role && (!alert.assignedTo || alert.assignedTo.toString() !== req.user.id)) {
+        return res.status(403).json({ error: 'Not assigned to you' });
+      }
+    }
     alert.status = 'resolved';
     alert.resolvedAt = new Date();
     alert.resolvedBy = req.user.name;

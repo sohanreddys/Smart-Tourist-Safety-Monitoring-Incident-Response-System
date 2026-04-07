@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, Alert, Vibration, Dimensions, Linking, Modal,
+  View, Text, TouchableOpacity, StyleSheet, Alert, Vibration, Dimensions, Linking, Modal, Platform,
 } from 'react-native';
 import MapView, { Marker, Circle, PROVIDER_DEFAULT } from 'react-native-maps';
 import * as Location from 'expo-location';
 import * as Network from 'expo-network';
 import { useAuth } from '../context/AuthContext';
 import { connectSocket, getSocket, disconnectSocket } from '../services/socket';
-import { saveOfflineAlert, getOfflineQueue, syncOfflineAlerts } from '../utils/offline';
+import { getOfflineQueue, syncOfflineAlerts } from '../utils/offline';
 import api from '../services/api';
 
 const { width } = Dimensions.get('window');
@@ -16,13 +16,15 @@ const MapScreen = () => {
   const { user } = useAuth();
   const mapRef = useRef(null);
   const [location, setLocation] = useState(null);
-  const [sosActive, setSosActive] = useState(false);
   const [geofences, setGeofences] = useState([]);
   const [services, setServices] = useState([]);
   const [geofenceWarning, setGeofenceWarning] = useState(null);
-  const [showServices, setShowServices] = useState(false);
+  const [showServices, setShowServices] = useState(true);
+  const [showZones, setShowZones] = useState(true);
   const [selectedService, setSelectedService] = useState(null);
+  const [selectedZone, setSelectedZone] = useState(null);
   const [offlineCount, setOfflineCount] = useState(0);
+  const [didInitialCenter, setDidInitialCenter] = useState(false);
 
   useEffect(() => {
     if (user) { connectSocket(user); }
@@ -37,6 +39,18 @@ const MapScreen = () => {
         Alert.alert('Permission Denied', 'Location permission is required for WanderMate to work.');
         return;
       }
+      // Get an immediate one-shot fix so we can center the map right away
+      try {
+        const first = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+        const firstPos = {
+          lat: first.coords.latitude, lng: first.coords.longitude,
+          accuracy: first.coords.accuracy, speed: first.coords.speed, heading: first.coords.heading,
+        };
+        setLocation(firstPos);
+        recenterToUser(firstPos);
+        loadNearbyServices(firstPos.lat, firstPos.lng);
+      } catch (e) {}
+
       subscription = await Location.watchPositionAsync(
         { accuracy: Location.Accuracy.High, distanceInterval: 10, timeInterval: 10000 },
         (loc) => {
@@ -47,6 +61,10 @@ const MapScreen = () => {
           setLocation(pos);
           sendLocationToServer(pos);
           checkGeofences(pos);
+          if (!didInitialCenter) {
+            recenterToUser(pos);
+            setDidInitialCenter(true);
+          }
         }
       );
     })();
@@ -111,45 +129,30 @@ const MapScreen = () => {
     try { const res = await api.get('/geofence'); setGeofences(res.data.geofences || []); } catch (e) {}
   };
 
-  const loadNearbyServices = async () => {
+  const loadNearbyServices = async (lat, lng) => {
     try {
-      const lat = location?.lat || 17.385;
-      const lng = location?.lng || 78.4867;
-      const res = await api.get('/location/nearby-services?lat=' + lat + '&lng=' + lng);
+      const la = lat || location?.lat || 17.385;
+      const ln = lng || location?.lng || 78.4867;
+      const res = await api.get('/location/nearby-services?lat=' + la + '&lng=' + ln);
       setServices(res.data.services || []);
-      setShowServices(true);
     } catch (e) {}
   };
 
-  const handleSOS = async () => {
-    setSosActive(true);
-    Vibration.vibrate([0, 300, 100, 300, 100, 300]);
-    const alertData = {
-      type: 'sos', message: 'Emergency SOS triggered from mobile!',
-      lat: location?.lat, lng: location?.lng,
-    };
-    const net = await Network.getNetworkStateAsync();
-    if (net.isConnected) {
-      try {
-        await api.post('/alerts/sos', alertData);
-        const socket = getSocket();
-        if (socket) { socket.emit('sos:trigger', { ...alertData, userId: user.id, userName: user.name }); }
-        await api.post('/blockchain/log', {
-          action: 'SOS_TRIGGERED_MOBILE',
-          details: 'SOS from ' + (location?.lat?.toFixed(4)) + ', ' + (location?.lng?.toFixed(4)),
-        });
-        Alert.alert('SOS Sent', 'Your emergency alert has been sent to authorities. Help is on the way.');
-      } catch (e) {
-        Alert.alert('Error', 'Failed to send SOS. Saved offline.');
-        await saveOfflineAlert(alertData);
-      }
-    } else {
-      await saveOfflineAlert(alertData);
-      const queue = await getOfflineQueue();
-      setOfflineCount(queue.length);
-      Alert.alert('Offline SOS', 'No internet. Alert saved locally and will sync when connected.');
-    }
-    setTimeout(() => setSosActive(false), 3000);
+  const recenterToUser = (pos) => {
+    const p = pos || location;
+    if (!p || !mapRef.current) return;
+    mapRef.current.animateToRegion({
+      latitude: p.lat, longitude: p.lng,
+      latitudeDelta: 0.015, longitudeDelta: 0.015,
+    }, 600);
+  };
+
+  const zoomToItem = (lat, lng) => {
+    if (!mapRef.current) return;
+    mapRef.current.animateToRegion({
+      latitude: lat, longitude: lng,
+      latitudeDelta: 0.008, longitudeDelta: 0.008,
+    }, 600);
   };
 
   const region = location ? {
@@ -172,36 +175,67 @@ const MapScreen = () => {
       )}
       <MapView ref={mapRef} style={styles.map} provider={PROVIDER_DEFAULT} initialRegion={region}
         showsUserLocation showsMyLocationButton>
-        {geofences.map((f) => (
-          <Circle key={f.id} center={{ latitude: f.lat, longitude: f.lng }} radius={f.radius}
-            strokeColor={f.riskLevel === 'high' ? '#ef4444' : f.riskLevel === 'medium' ? '#f59e0b' : '#3b82f6'}
-            fillColor={f.riskLevel === 'high' ? 'rgba(239,68,68,0.15)' : f.riskLevel === 'medium' ? 'rgba(245,158,11,0.15)' : 'rgba(59,130,246,0.15)'}
-            strokeWidth={2} />
-        ))}
-        {geofences.map((f) => (
-          <Marker key={'label-' + f.id} coordinate={{ latitude: f.lat, longitude: f.lng }}
-            title={f.name} description={f.riskLevel + ' risk — ' + f.description}
-            pinColor={f.riskLevel === 'high' ? 'red' : f.riskLevel === 'medium' ? 'orange' : 'blue'} />
-        ))}
-        {showServices && services.map((s) => (
-          <Marker key={'svc-' + s.id} coordinate={{ latitude: s.lat, longitude: s.lng }}
-            title={s.name} description={s.type + ' — ' + s.phone}
-            pinColor="green" onPress={() => setSelectedService(s)} />
-        ))}
+        {showZones && geofences.map((f) => {
+          const isSel = selectedZone && selectedZone.id === f.id;
+          return (
+            <Circle key={f.id} center={{ latitude: f.lat, longitude: f.lng }} radius={f.radius}
+              strokeColor={f.riskLevel === 'high' ? '#ef4444' : f.riskLevel === 'medium' ? '#f59e0b' : '#3b82f6'}
+              fillColor={f.riskLevel === 'high' ? 'rgba(239,68,68,0.15)' : f.riskLevel === 'medium' ? 'rgba(245,158,11,0.15)' : 'rgba(59,130,246,0.15)'}
+              strokeWidth={isSel ? 5 : 2} />
+          );
+        })}
+        {showZones && geofences.map((f) => {
+          const isSel = selectedZone && selectedZone.id === f.id;
+          return (
+            <Marker key={'label-' + f.id} coordinate={{ latitude: f.lat, longitude: f.lng }}
+              title={f.name} description={f.riskLevel + ' risk — ' + f.description}
+              pinColor={f.riskLevel === 'high' ? 'red' : f.riskLevel === 'medium' ? 'orange' : 'blue'}
+              onPress={() => { setSelectedZone(f); zoomToItem(f.lat, f.lng); }}>
+              <View style={[styles.marker, styles.markerZone, isSel && styles.markerBig,
+                f.riskLevel === 'high' && { backgroundColor: '#dc2626' },
+                f.riskLevel === 'medium' && { backgroundColor: '#d97706' }]}>
+                <Text style={[styles.markerIcon, isSel && styles.markerIconBig]}>⚠️</Text>
+              </View>
+            </Marker>
+          );
+        })}
+        {showServices && services.map((s) => {
+          const isSel = selectedService && (selectedService.id === s.id);
+          const icon = s.type === 'hospital' ? '🏥' : s.type === 'police' ? '👮' : s.type === 'fire' ? '🚒' : s.type === 'pharmacy' ? '💊' : '📍';
+          return (
+            <Marker key={'svc-' + (s.id || s.name)} coordinate={{ latitude: s.lat, longitude: s.lng }}
+              title={s.name} description={(s.type || '') + ' — ' + (s.phone || '')}
+              onPress={() => { setSelectedService(s); zoomToItem(s.lat, s.lng); }}>
+              <View style={[styles.marker, styles.markerSvc, isSel && styles.markerBig]}>
+                <Text style={[styles.markerIcon, isSel && styles.markerIconBig]}>{icon}</Text>
+              </View>
+            </Marker>
+          );
+        })}
       </MapView>
+
+      {/* Recenter button (floats above controls) */}
+      <TouchableOpacity style={styles.recenterBtn} onPress={() => recenterToUser()}>
+        <Text style={styles.recenterIcon}>📍</Text>
+      </TouchableOpacity>
+
       <View style={styles.controls}>
         <View style={styles.buttonRow}>
-          <TouchableOpacity style={styles.btnServices} onPress={loadNearbyServices}>
-            <Text style={styles.btnSmallText}>Nearby Services</Text>
+          <TouchableOpacity
+            style={[styles.toggleBtn, showServices && styles.toggleBtnActive]}
+            onPress={() => { setShowServices(!showServices); if (!showServices) loadNearbyServices(); }}>
+            <Text style={[styles.toggleBtnText, showServices && styles.toggleBtnTextActive]}>
+              🏥 Nearby Services {showServices ? 'ON' : 'OFF'}
+            </Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.btnZones} onPress={loadGeofences}>
-            <Text style={styles.btnSmallText}>Risk Zones</Text>
+          <TouchableOpacity
+            style={[styles.toggleBtn, showZones && styles.toggleBtnActive]}
+            onPress={() => { setShowZones(!showZones); if (!showZones) loadGeofences(); }}>
+            <Text style={[styles.toggleBtnText, showZones && styles.toggleBtnTextActive]}>
+              ⚠️ Risk Zones {showZones ? 'ON' : 'OFF'}
+            </Text>
           </TouchableOpacity>
         </View>
-        <TouchableOpacity style={[styles.sosButton, sosActive && styles.sosDisabled]} onPress={handleSOS}
-          disabled={sosActive} activeOpacity={0.7}>
-          <Text style={styles.sosText}>{sosActive ? 'SOS SENT!' : 'SOS EMERGENCY'}</Text>
-        </TouchableOpacity>
         {location && (
           <Text style={styles.coordsText}>
             {location.lat.toFixed(6)}, {location.lng.toFixed(6)} | ±{Math.round(location.accuracy || 0)}m
@@ -271,13 +305,19 @@ const styles = StyleSheet.create({
   offlineText: { color: '#fff', fontSize: 12, fontWeight: '600' },
   map: { flex: 1 },
   controls: { padding: 16, backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, shadowColor: '#000', shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 10 },
-  buttonRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
-  btnServices: { flex: 1, backgroundColor: '#16a34a', borderRadius: 10, padding: 12, alignItems: 'center' },
-  btnZones: { flex: 1, backgroundColor: '#d97706', borderRadius: 10, padding: 12, alignItems: 'center' },
-  btnSmallText: { color: '#fff', fontWeight: '700', fontSize: 13 },
-  sosButton: { backgroundColor: '#dc2626', borderRadius: 16, padding: 20, alignItems: 'center', shadowColor: '#dc2626', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 8 },
-  sosDisabled: { backgroundColor: '#9ca3af' },
-  sosText: { color: '#fff', fontSize: 22, fontWeight: '900', letterSpacing: 1 },
+  buttonRow: { flexDirection: 'row', gap: 10 },
+  toggleBtn: { flex: 1, backgroundColor: '#f3f4f6', borderRadius: 10, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: '#e5e7eb' },
+  toggleBtnActive: { backgroundColor: '#dbeafe', borderColor: '#2563eb' },
+  toggleBtnText: { color: '#6b7280', fontWeight: '700', fontSize: 12 },
+  toggleBtnTextActive: { color: '#1d4ed8' },
+  recenterBtn: { position: 'absolute', right: 16, bottom: 160, width: 52, height: 52, borderRadius: 26, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 6, elevation: 6 },
+  recenterIcon: { fontSize: 24 },
+  marker: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#16a34a', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' },
+  markerSvc: { backgroundColor: '#16a34a' },
+  markerZone: { backgroundColor: '#3b82f6' },
+  markerBig: { width: 56, height: 56, borderRadius: 28, borderWidth: 3, shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 8 },
+  markerIcon: { fontSize: 16 },
+  markerIconBig: { fontSize: 26 },
   coordsText: { textAlign: 'center', color: '#9ca3af', fontSize: 11, marginTop: 8 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 30, maxHeight: '80%' },

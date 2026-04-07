@@ -10,8 +10,8 @@ import * as Battery from 'expo-battery';
 import * as Network from 'expo-network';
 import * as SMS from 'expo-sms';
 
-// Public domain siren sound (loops during loud SOS)
-const SIREN_URL = 'https://cdn.pixabay.com/download/audio/2022/03/15/audio_8a8d6e2f1f.mp3?filename=emergency-alarm-with-reverb-29431.mp3';
+// Bundled siren WAV — plays at max volume, overrides silent switch
+const SIREN_ASSET = require('../../assets/siren.wav');
 import { useAuth } from '../context/AuthContext';
 import { connectSocket, getSocket } from '../services/socket';
 import api from '../services/api';
@@ -141,17 +141,21 @@ const SOSScreen = () => {
 
   const startSiren = async () => {
     try {
+      // Override iOS silent switch, use media volume channel (max), background capable
       await Audio.setAudioModeAsync({
-        playsInSilentModeIOS: true,
+        playsInSilentModeIOS: true,       // bypass the mute/silent switch on iOS
         staysActiveInBackground: true,
         shouldDuckAndroid: false,
+        playThroughEarpieceAndroid: false, // use loud speaker on Android
       });
       const { sound } = await Audio.Sound.createAsync(
-        { uri: SIREN_URL },
+        SIREN_ASSET,
         { shouldPlay: true, isLooping: true, volume: 1.0 }
       );
       sirenSoundRef.current = sound;
       setSirenPlaying(true);
+      // Vibration loop alongside the siren
+      Vibration.vibrate([0, 800, 200, 800, 200, 800, 200, 800], true);
     } catch (e) {
       console.error('Siren error:', e);
     }
@@ -164,13 +168,21 @@ const SOSScreen = () => {
         await sirenSoundRef.current.unloadAsync();
         sirenSoundRef.current = null;
       }
+      Vibration.cancel();
     } catch (e) {}
     setSirenPlaying(false);
   };
 
   const notifyEmergencyContacts = async (loc) => {
     try {
-      const contacts = (user?.emergencyContacts || []).map(c => c.phone).filter(Boolean);
+      // Support both single contact (User.emergencyContactPhone) and array (emergencyContacts)
+      const contacts = [];
+      if (user?.emergencyContactPhone) contacts.push(user.emergencyContactPhone);
+      if (Array.isArray(user?.emergencyContacts)) {
+        user.emergencyContacts.forEach(c => {
+          if (c?.phone) contacts.push(c.phone);
+        });
+      }
       if (contacts.length === 0) return;
       const isAvailable = await SMS.isAvailableAsync();
       if (!isAvailable) return;
@@ -266,48 +278,63 @@ const SOSScreen = () => {
     while (recordingLoopRef.current) {
       try {
         if (!cameraRef.current) {
-          await new Promise(r => setTimeout(r, 1000));
+          await new Promise(r => setTimeout(r, 500));
           continue;
         }
         setRecording(true);
-        const video = await cameraRef.current.recordAsync({ maxDuration: 60 });
+        // 10s clips — short enough to look near-live, long enough to be reliable on both platforms
+        const video = await cameraRef.current.recordAsync({ maxDuration: 10 });
         setRecording(false);
+        if (!recordingLoopRef.current) break;
+        if (!video || !video.uri) {
+          await new Promise(r => setTimeout(r, 500));
+          continue;
+        }
         clipIndexRef.current += 1;
         setClipCount(clipIndexRef.current);
 
-        // Upload in background
-        uploadClip(alertId, video.uri, cameraFacing, clipIndexRef.current);
+        // Serialize uploads so we don't flood the network on Android
+        await uploadClip(alertId, video.uri, cameraFacing, clipIndexRef.current);
 
-        // Toggle camera for next clip
-        setCameraFacing(prev => prev === 'back' ? 'front' : 'back');
+        // NOTE: camera is no longer auto-switched. User uses the manual
+        // FRONT/REAR toggle button on the overlay to change cameras.
       } catch (e) {
         console.error('Recording error:', e);
         setRecording(false);
-        await new Promise(r => setTimeout(r, 2000));
+        await new Promise(r => setTimeout(r, 1500));
       }
     }
   };
 
   const uploadClip = async (alertId, uri, camFacing, index) => {
-    try {
+    const attemptUpload = async () => {
       const formData = new FormData();
+      // iOS sometimes emits file:// URIs with extra characters — normalize
+      const cleanUri = Platform.OS === 'ios' ? uri.replace('file://', '') : uri;
       formData.append('file', {
-        uri: uri,
+        uri: cleanUri,
         name: 'clip_' + index + '.mp4',
         type: 'video/mp4',
       });
       formData.append('type', 'video');
       formData.append('cameraType', camFacing);
       formData.append('clipIndex', String(index));
-      formData.append('duration', '60');
-
-      await api.post('/evidence/' + alertId + '/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 120000,
+      formData.append('duration', '10');
+      return api.post('/evidence/' + alertId + '/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data', Accept: 'application/json' },
+        timeout: 180000,
+        transformRequest: (data) => data, // don't let axios touch FormData
       });
-      console.log('Clip ' + index + ' uploaded');
-    } catch (e) {
-      console.error('Upload failed for clip ' + index, e.message);
+    };
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await attemptUpload();
+        console.log('Clip ' + index + ' uploaded (attempt ' + attempt + ')');
+        return;
+      } catch (e) {
+        console.error('Upload clip ' + index + ' attempt ' + attempt + ' failed:', e.message);
+        if (attempt < 3) await new Promise(r => setTimeout(r, 1000 * attempt));
+      }
     }
   };
 
@@ -411,15 +438,25 @@ const SOSScreen = () => {
             </Text>
           )}
 
-          {/* Siren toggle */}
-          <TouchableOpacity
-            style={styles.sirenToggle}
-            onPress={() => (sirenPlaying ? stopSiren() : startSiren())}
-          >
-            <Text style={styles.sirenToggleText}>
-              {sirenPlaying ? '🔇  MUTE SIREN' : '📢  SOUND SIREN'}
-            </Text>
-          </TouchableOpacity>
+          {/* Action row: Siren + Camera switch */}
+          <View style={styles.actionRow}>
+            <TouchableOpacity
+              style={styles.actionBtn}
+              onPress={() => (sirenPlaying ? stopSiren() : startSiren())}
+            >
+              <Text style={styles.actionBtnText}>
+                {sirenPlaying ? '🔇 MUTE' : '📢 SIREN'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.actionBtn}
+              onPress={() => setCameraFacing(prev => prev === 'back' ? 'front' : 'back')}
+            >
+              <Text style={styles.actionBtnText}>
+                🔄 {cameraFacing === 'back' ? 'FRONT CAM' : 'REAR CAM'}
+              </Text>
+            </TouchableOpacity>
+          </View>
 
           {/* Cancel button — only after 7 seconds */}
           {canCancel ? (
@@ -575,6 +612,12 @@ const styles = StyleSheet.create({
     paddingVertical: 12, paddingHorizontal: 24,
   },
   sirenToggleText: { color: '#fff', fontWeight: '700', fontSize: 14, letterSpacing: 1 },
+  actionRow: { flexDirection: 'row', gap: 10, marginTop: 20, width: '100%' },
+  actionBtn: {
+    flex: 1, backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 12,
+    paddingVertical: 14, alignItems: 'center',
+  },
+  actionBtnText: { color: '#fff', fontWeight: '800', fontSize: 13, letterSpacing: 0.5 },
 });
 
 export default SOSScreen;

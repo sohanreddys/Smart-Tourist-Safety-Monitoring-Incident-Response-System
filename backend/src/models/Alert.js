@@ -47,6 +47,13 @@ const alertSchema = new mongoose.Schema({
   // Evidence tracking
   recordingActive: { type: Boolean, default: false },
   evidenceCount: { type: Number, default: 0 },
+
+  // Department assignment by main admin
+  assignedRole: { type: String, enum: ['medical', 'police', 'fire', 'disaster', null], default: null, index: true },
+  assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true },
+  assignedAt: { type: Date, default: null },
+  assignedBy: { type: String, default: '' },
+  assignmentNote: { type: String, default: '' },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Alert', alertSchema);

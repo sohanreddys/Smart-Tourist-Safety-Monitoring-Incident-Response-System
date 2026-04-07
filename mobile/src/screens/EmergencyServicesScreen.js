@@ -87,7 +87,7 @@ const EmergencyServicesScreen = () => {
     setShowAll(false);
   }, [selectedType, allServices]);
 
-  const displayedServices = showAll ? services : services.slice(0, 5);
+  const displayedServices = showAll ? services : services.slice(0, 10);
 
   const openDirections = (lat, lng, name) => {
     const encodedName = encodeURIComponent(name || 'Destination');
@@ -211,12 +211,12 @@ const EmergencyServicesScreen = () => {
         }
         ListFooterComponent={
           <View style={{ paddingBottom: 30 }}>
-            {!showAll && services.length > 5 && (
+            {!showAll && services.length > 10 && (
               <TouchableOpacity style={styles.viewMoreBtn} onPress={() => setShowAll(true)}>
-                <Text style={styles.viewMoreText}>View More ({services.length - 5} more)</Text>
+                <Text style={styles.viewMoreText}>View More ({services.length - 10} more)</Text>
               </TouchableOpacity>
             )}
-            {showAll && services.length > 5 && (
+            {showAll && services.length > 10 && (
               <TouchableOpacity style={styles.viewMoreBtn} onPress={() => setShowAll(false)}>
                 <Text style={styles.viewMoreText}>Show Less</Text>
               </TouchableOpacity>
