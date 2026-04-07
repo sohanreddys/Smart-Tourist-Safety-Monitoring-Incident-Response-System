@@ -6,7 +6,7 @@ import { isOnline, saveOfflineAlert, getOfflineQueue, syncOfflineAlerts } from '
 import api from '../services/api';
 
 const Dashboard = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, updateProfile, refreshUser } = useAuth();
   const navigate = useNavigate();
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
@@ -26,6 +26,9 @@ const Dashboard = () => {
   const [networkStatus, setNetworkStatus] = useState(navigator.onLine);
   const [resolvedNotif, setResolvedNotif] = useState(null);
   const [activeTab, setActiveTab] = useState('map');
+  const [profileForm, setProfileForm] = useState({});
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileMsg, setProfileMsg] = useState('');
 
   useEffect(() => {
     if (user) {
@@ -62,15 +65,29 @@ const Dashboard = () => {
   }, []);
 
   useEffect(() => {
-    if (!mapRef.current || mapInstance.current) return;
+    if (activeTab !== 'map') return;
+    if (!mapRef.current) return;
+
     const L = window.L;
     if (!L) return;
+
+    // Remove old map instance if exists
+    if (mapInstance.current) {
+      mapInstance.current.remove();
+      mapInstance.current = null;
+    }
+
+    // Create new map
     const map = L.map(mapRef.current).setView([17.385, 78.4867], 14);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors',
     }).addTo(map);
+
+    // Invalidate size to ensure map fills container
+    setTimeout(() => map.invalidateSize(), 100);
+
     mapInstance.current = map;
-    return () => { map.remove(); mapInstance.current = null; };
+    return () => { if (mapInstance.current) { mapInstance.current.remove(); mapInstance.current = null; } };
   }, [activeTab]);
 
   useEffect(() => {
@@ -286,6 +303,7 @@ const Dashboard = () => {
             { key: 'alerts', label: 'Alerts' },
             { key: 'id', label: 'Digital ID' },
             { key: 'services', label: 'Services' },
+            { key: 'profile', label: 'Profile' },
           ].map((tab) => (
             <button key={tab.key} onClick={() => setActiveTab(tab.key)}
               className={'px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ' +
@@ -306,8 +324,8 @@ const Dashboard = () => {
         </div>
 
         {activeTab === 'map' && (
-          <div>
-            <div ref={mapRef} className="w-full h-96 rounded-2xl shadow-lg border border-gray-200 z-0" />
+          <div className="space-y-4">
+            <div ref={mapRef} className="w-full rounded-2xl shadow-lg border border-gray-200 z-0" style={{ height: '600px', minHeight: '600px' }} />
             <div className="mt-3 flex flex-wrap gap-2">
               <button onClick={loadServices} className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700">Show Nearby Services</button>
               <button onClick={loadGeofences} className="px-4 py-2 bg-yellow-500 text-white rounded-lg text-sm font-medium hover:bg-yellow-600">Show Risk Zones</button>
@@ -448,22 +466,180 @@ const Dashboard = () => {
                 <button onClick={loadServices} className="p-8 bg-gray-100 rounded-xl text-gray-500 hover:bg-gray-200">Click to load nearby services</button>
               ) : (
                 services.map((s) => (
-                  <div key={s.id} className="bg-white p-4 rounded-xl border shadow-sm flex justify-between items-center">
-                    <div>
-                      <h4 className="font-bold text-gray-800">{s.name}</h4>
-                      <p className="text-sm text-gray-500">{s.type} - {s.distance}{s.city ? ' - ' + s.city : ''}</p>
-                      {s.address && <p className="text-xs text-gray-400">{s.address}</p>}
+                  <div key={s.id} className="bg-white p-4 rounded-xl border shadow-sm">
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="flex-1">
+                        <h4 className="font-bold text-gray-800">{s.name}</h4>
+                        <p className="text-sm text-gray-500">{s.type} - {s.distance}{s.city ? ' - ' + s.city : ''}</p>
+                        {s.address && <p className="text-xs text-gray-400 mt-1">{s.address}</p>}
+                      </div>
                     </div>
-                    <a href={'tel:' + s.phone} className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 flex-shrink-0">
-                      Call {s.phone}
-                    </a>
+                    <div className="flex gap-2 flex-wrap">
+                      <a href={'tel:' + s.phone} className="flex-1 min-w-max bg-green-600 text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-green-700 text-center transition-all">
+                        ☎ {s.phone}
+                      </a>
+                      <a href={'https://www.google.com/maps/dir/?api=1&destination=' + s.lat + ',' + s.lng} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-max bg-blue-600 text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 text-center transition-all">
+                        🗺 Directions
+                      </a>
+                    </div>
                   </div>
                 ))
               )}
             </div>
           </div>
         )}
+
+        {activeTab === 'profile' && (
+          <div>
+            <h2 className="text-lg font-bold text-gray-800 mb-4">My Profile</h2>
+            {profileMsg && <div className="bg-green-50 border border-green-400 text-green-700 px-4 py-3 rounded-lg mb-4 text-sm">{profileMsg}</div>}
+
+            <ProfileEditor
+              user={user}
+              profileForm={profileForm}
+              setProfileForm={setProfileForm}
+              profileSaving={profileSaving}
+              onSave={async () => {
+                setProfileSaving(true);
+                setProfileMsg('');
+                try {
+                  await updateProfile(profileForm);
+                  setProfileMsg('Profile updated successfully!');
+                  setTimeout(() => setProfileMsg(''), 3000);
+                } catch (err) {
+                  setProfileMsg('Failed to update profile');
+                }
+                setProfileSaving(false);
+              }}
+            />
+          </div>
+        )}
       </div>
+    </div>
+  );
+};
+
+const ProfileEditor = ({ user, profileForm, setProfileForm, profileSaving, onSave }) => {
+  const [initialized, setInitialized] = React.useState(false);
+
+  React.useEffect(() => {
+    if (user && !initialized) {
+      setProfileForm({
+        name: user.name || '',
+        phone: user.phone || '',
+        nationality: user.nationality || '',
+        passportNumber: user.passportNumber || '',
+        dateOfBirth: user.dateOfBirth || '',
+        gender: user.gender || '',
+        emergencyContactName: user.emergencyContactName || '',
+        emergencyContactPhone: user.emergencyContactPhone || '',
+        emergencyContactRelation: user.emergencyContactRelation || '',
+        address: user.address || '',
+        bloodGroup: user.bloodGroup || '',
+        medicalConditions: user.medicalConditions || '',
+        preferredLanguage: user.preferredLanguage || 'English',
+        travelPurpose: user.travelPurpose || '',
+      });
+      setInitialized(true);
+    }
+  }, [user, initialized, setProfileForm]);
+
+  const handleChange = (e) => setProfileForm({ ...profileForm, [e.target.name]: e.target.value });
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-blue-800 text-white rounded-2xl p-6 flex items-center space-x-4 mb-4">
+        <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center text-2xl font-bold">{user?.name?.[0]?.toUpperCase() || 'U'}</div>
+        <div>
+          <h3 className="text-xl font-bold">{user?.name}</h3>
+          <p className="text-blue-200 text-sm">{user?.email}</p>
+          <span className="inline-block mt-1 bg-white/20 text-white text-xs px-3 py-1 rounded-full font-bold">{user?.role?.toUpperCase()}</span>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl border p-5 space-y-4">
+        <h3 className="font-bold text-gray-800 text-sm uppercase tracking-wide">Personal Information</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs text-gray-500 font-medium">Full Name</label>
+            <input type="text" name="name" value={profileForm.name || ''} onChange={handleChange} className="w-full px-3 py-2 border rounded-lg text-sm" />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 font-medium">Phone</label>
+            <input type="tel" name="phone" value={profileForm.phone || ''} onChange={handleChange} className="w-full px-3 py-2 border rounded-lg text-sm" />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 font-medium">Nationality</label>
+            <input type="text" name="nationality" value={profileForm.nationality || ''} onChange={handleChange} className="w-full px-3 py-2 border rounded-lg text-sm" />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 font-medium">Passport / ID Number</label>
+            <input type="text" name="passportNumber" value={profileForm.passportNumber || ''} onChange={handleChange} className="w-full px-3 py-2 border rounded-lg text-sm" />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 font-medium">Date of Birth</label>
+            <input type="date" name="dateOfBirth" value={profileForm.dateOfBirth || ''} onChange={handleChange} className="w-full px-3 py-2 border rounded-lg text-sm" />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 font-medium">Gender</label>
+            <select name="gender" value={profileForm.gender || ''} onChange={handleChange} className="w-full px-3 py-2 border rounded-lg text-sm">
+              <option value="">Select</option><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 font-medium">Blood Group</label>
+            <select name="bloodGroup" value={profileForm.bloodGroup || ''} onChange={handleChange} className="w-full px-3 py-2 border rounded-lg text-sm">
+              <option value="">Select</option>
+              {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(bg => <option key={bg} value={bg}>{bg}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 font-medium">Preferred Language</label>
+            <select name="preferredLanguage" value={profileForm.preferredLanguage || 'English'} onChange={handleChange} className="w-full px-3 py-2 border rounded-lg text-sm">
+              <option value="English">English</option><option value="Hindi">Hindi</option><option value="Telugu">Telugu</option>
+              <option value="Tamil">Tamil</option><option value="Bengali">Bengali</option><option value="Other">Other</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label className="text-xs text-gray-500 font-medium">Home Address</label>
+          <input type="text" name="address" value={profileForm.address || ''} onChange={handleChange} className="w-full px-3 py-2 border rounded-lg text-sm" />
+        </div>
+        <div>
+          <label className="text-xs text-gray-500 font-medium">Travel Purpose</label>
+          <input type="text" name="travelPurpose" value={profileForm.travelPurpose || ''} onChange={handleChange} className="w-full px-3 py-2 border rounded-lg text-sm" />
+        </div>
+        <div>
+          <label className="text-xs text-gray-500 font-medium">Medical Conditions / Allergies</label>
+          <textarea name="medicalConditions" value={profileForm.medicalConditions || ''} onChange={handleChange} className="w-full px-3 py-2 border rounded-lg text-sm" rows={2} />
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl border p-5 space-y-4">
+        <h3 className="font-bold text-gray-800 text-sm uppercase tracking-wide">Emergency Contact</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label className="text-xs text-gray-500 font-medium">Contact Name</label>
+            <input type="text" name="emergencyContactName" value={profileForm.emergencyContactName || ''} onChange={handleChange} className="w-full px-3 py-2 border rounded-lg text-sm" />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 font-medium">Contact Phone</label>
+            <input type="tel" name="emergencyContactPhone" value={profileForm.emergencyContactPhone || ''} onChange={handleChange} className="w-full px-3 py-2 border rounded-lg text-sm" />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 font-medium">Relationship</label>
+            <select name="emergencyContactRelation" value={profileForm.emergencyContactRelation || ''} onChange={handleChange} className="w-full px-3 py-2 border rounded-lg text-sm">
+              <option value="">Select</option><option value="parent">Parent</option><option value="spouse">Spouse</option>
+              <option value="sibling">Sibling</option><option value="friend">Friend</option><option value="relative">Relative</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <button onClick={onSave} disabled={profileSaving}
+        className="w-full py-3 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 disabled:opacity-50">
+        {profileSaving ? 'Saving...' : 'Save Profile'}
+      </button>
     </div>
   );
 };

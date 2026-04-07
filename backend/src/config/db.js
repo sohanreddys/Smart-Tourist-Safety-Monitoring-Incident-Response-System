@@ -1,14 +1,14 @@
-const db = {
-  users: [],
-  locations: [],
-  alerts: [],
-  geofences: [],
-  blockchainLogs: [],
-  incidents: [],
+const mongoose = require('mongoose');
+
+const connectDB = async () => {
+  try {
+    const conn = await mongoose.connect(process.env.MONGODB_URI);
+    console.log('MongoDB Connected:', conn.connection.host);
+    return conn;
+  } catch (err) {
+    console.error('MongoDB connection error:', err.message);
+    process.exit(1);
+  }
 };
 
-const generateId = () => {
-  return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
-};
-
-module.exports = { db, generateId };
+module.exports = { connectDB };

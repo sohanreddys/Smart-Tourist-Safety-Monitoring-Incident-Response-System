@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, Alert, Vibration, Dimensions,
+  View, Text, TouchableOpacity, StyleSheet, Alert, Vibration, Dimensions, Linking, Modal,
 } from 'react-native';
 import MapView, { Marker, Circle, PROVIDER_DEFAULT } from 'react-native-maps';
 import * as Location from 'expo-location';
@@ -21,6 +21,7 @@ const MapScreen = () => {
   const [services, setServices] = useState([]);
   const [geofenceWarning, setGeofenceWarning] = useState(null);
   const [showServices, setShowServices] = useState(false);
+  const [selectedService, setSelectedService] = useState(null);
   const [offlineCount, setOfflineCount] = useState(0);
 
   useEffect(() => {
@@ -184,8 +185,8 @@ const MapScreen = () => {
         ))}
         {showServices && services.map((s) => (
           <Marker key={'svc-' + s.id} coordinate={{ latitude: s.lat, longitude: s.lng }}
-            title={s.name} description={s.type + ' — ' + s.phone + ' — ' + s.distance}
-            pinColor="green" />
+            title={s.name} description={s.type + ' — ' + s.phone}
+            pinColor="green" onPress={() => setSelectedService(s)} />
         ))}
       </MapView>
       <View style={styles.controls}>
@@ -207,9 +208,60 @@ const MapScreen = () => {
           </Text>
         )}
       </View>
+
+      {/* Service Details Modal */}
+      <Modal visible={!!selectedService} transparent={true} animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{selectedService?.name}</Text>
+              <TouchableOpacity onPress={() => setSelectedService(null)} style={styles.closeBtn}>
+                <Text style={styles.closeBtnText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.serviceDetails}>
+              <DetailRow label="Type" value={selectedService?.type || 'N/A'} />
+              <DetailRow label="Distance" value={selectedService?.distance || 'N/A'} />
+              {selectedService?.city && <DetailRow label="City" value={selectedService.city} />}
+              {selectedService?.address && <DetailRow label="Address" value={selectedService.address} />}
+            </View>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.actionButton} onPress={() => {
+                if (selectedService?.phone) {
+                  Linking.openURL('tel:' + selectedService.phone);
+                }
+              }}>
+                <Text style={styles.actionButtonText}>☎ Call {selectedService?.phone}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={[styles.actionButton, styles.actionButtonBlue]} onPress={() => {
+                if (selectedService?.lat && selectedService?.lng) {
+                  const url = 'https://www.google.com/maps/dir/?api=1&destination=' + selectedService.lat + ',' + selectedService.lng;
+                  Linking.openURL(url);
+                }
+              }}>
+                <Text style={styles.actionButtonText}>🗺 Get Directions</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity style={styles.closeModalBtn} onPress={() => setSelectedService(null)}>
+              <Text style={styles.closeModalBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
+
+const DetailRow = ({ label, value }) => (
+  <View style={styles.detailRow}>
+    <Text style={styles.detailLabel}>{label}</Text>
+    <Text style={styles.detailValue}>{value}</Text>
+  </View>
+);
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f3f4f6' },
@@ -227,6 +279,22 @@ const styles = StyleSheet.create({
   sosDisabled: { backgroundColor: '#9ca3af' },
   sosText: { color: '#fff', fontSize: 22, fontWeight: '900', letterSpacing: 1 },
   coordsText: { textAlign: 'center', color: '#9ca3af', fontSize: 11, marginTop: 8 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 30, maxHeight: '80%' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
+  modalTitle: { fontSize: 20, fontWeight: '700', color: '#1f2937', flex: 1 },
+  closeBtn: { padding: 8, width: 40, height: 40, borderRadius: 20, backgroundColor: '#f3f4f6', alignItems: 'center', justifyContent: 'center' },
+  closeBtnText: { fontSize: 20, color: '#6b7280', fontWeight: '700' },
+  serviceDetails: { marginBottom: 20 },
+  detailRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  detailLabel: { fontSize: 13, color: '#6b7280', fontWeight: '600' },
+  detailValue: { fontSize: 13, color: '#1f2937', fontWeight: '600', maxWidth: '60%', textAlign: 'right' },
+  modalActions: { gap: 10, marginBottom: 14 },
+  actionButton: { backgroundColor: '#16a34a', borderRadius: 12, padding: 16, alignItems: 'center' },
+  actionButtonBlue: { backgroundColor: '#2563eb' },
+  actionButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  closeModalBtn: { backgroundColor: '#f3f4f6', borderRadius: 12, padding: 14, alignItems: 'center' },
+  closeModalBtnText: { color: '#374151', fontSize: 15, fontWeight: '600' },
 });
 
 export default MapScreen;

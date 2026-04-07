@@ -47,11 +47,11 @@ export const AuthProvider = ({ children }) => {
       await api.post('/blockchain/log', {
         action: 'DEVICE_LOGIN',
         details: JSON.stringify({
-          device: info.device.modelName,
-          os: info.device.osName + ' ' + info.device.osVersion,
-          battery: info.battery.level + '%',
-          network: info.network.type,
-          ip: info.network.ipAddress,
+          device: info.device?.modelName || 'unknown',
+          os: (info.device?.osName || '') + ' ' + (info.device?.osVersion || ''),
+          battery: (info.battery?.level || 'N/A') + '%',
+          network: info.network?.type || 'unknown',
+          ip: info.network?.ipAddress || 'unknown',
           location: info.location ? info.location.lat.toFixed(4) + ', ' + info.location.lng.toFixed(4) : 'unavailable',
         }),
       });
@@ -60,8 +60,17 @@ export const AuthProvider = ({ children }) => {
     return userData;
   };
 
-  const register = async (name, email, password, phone, role) => {
-    const res = await api.post('/auth/register', { name, email, password, phone, role });
+  const register = async (nameOrForm, email, password, phone, role) => {
+    // Accept either full form object OR individual args
+    let payload;
+    if (typeof nameOrForm === 'object' && nameOrForm !== null && nameOrForm.email) {
+      // Form object passed
+      payload = { ...nameOrForm, role: nameOrForm.role || 'tourist' };
+    } else {
+      // Individual args passed (legacy)
+      payload = { name: nameOrForm, email, password, phone, role: role || 'tourist' };
+    }
+    const res = await api.post('/auth/register', payload);
     const { user: userData, token: newToken } = res.data;
     setUser(userData);
     setToken(newToken);
@@ -76,6 +85,26 @@ export const AuthProvider = ({ children }) => {
     return userData;
   };
 
+  const updateProfile = async (profileData) => {
+    const res = await api.put('/auth/profile', profileData);
+    const updatedUser = res.data.user;
+    setUser(updatedUser);
+    await AsyncStorage.setItem('wandermate_user', JSON.stringify(updatedUser));
+    return updatedUser;
+  };
+
+  const refreshUser = async () => {
+    try {
+      const res = await api.get('/auth/me');
+      const u = res.data.user;
+      setUser(u);
+      await AsyncStorage.setItem('wandermate_user', JSON.stringify(u));
+      return u;
+    } catch (err) {
+      return null;
+    }
+  };
+
   const logout = async () => {
     setUser(null);
     setToken(null);
@@ -86,7 +115,7 @@ export const AuthProvider = ({ children }) => {
 
   const value = {
     user, token, loading, deviceInfo,
-    login, register, logout,
+    login, register, updateProfile, refreshUser, logout,
     isAuthenticated: !!token,
   };
 

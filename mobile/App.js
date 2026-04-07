@@ -8,6 +8,8 @@ import { AuthProvider, useAuth } from './src/context/AuthContext';
 import LoginScreen from './src/screens/LoginScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
 import MapScreen from './src/screens/MapScreen';
+import SOSScreen from './src/screens/SOSScreen';
+import EmergencyServicesScreen from './src/screens/EmergencyServicesScreen';
 import AlertsScreen from './src/screens/AlertsScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 
@@ -15,13 +17,32 @@ const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
 const TabIcon = ({ label, focused }) => {
-  const icons = { Map: '📍', Alerts: '🚨', Profile: '👤' };
+  const icons = { Map: '📍', SOS: '🚨', Services: '🏥', Alerts: '🔔', Profile: '👤' };
+  const isSOSTab = label === 'SOS';
   return (
-    <View style={{ alignItems: 'center' }}>
-      <Text style={{ fontSize: 20 }}>{icons[label] || '•'}</Text>
-      <Text style={{ fontSize: 10, color: focused ? '#2563eb' : '#9ca3af', fontWeight: focused ? '700' : '400' }}>
-        {label}
-      </Text>
+    <View style={[
+      { alignItems: 'center' },
+      isSOSTab && { marginTop: -18 },
+    ]}>
+      {isSOSTab ? (
+        <View style={{
+          width: 56, height: 56, borderRadius: 28,
+          backgroundColor: focused ? '#dc2626' : '#ef4444',
+          justifyContent: 'center', alignItems: 'center',
+          shadowColor: '#dc2626', shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.4, shadowRadius: 8, elevation: 10,
+          borderWidth: 3, borderColor: '#fff',
+        }}>
+          <Text style={{ fontSize: 24 }}>🚨</Text>
+        </View>
+      ) : (
+        <>
+          <Text style={{ fontSize: 20 }}>{icons[label] || '•'}</Text>
+          <Text style={{ fontSize: 9, color: focused ? '#2563eb' : '#9ca3af', fontWeight: focused ? '700' : '400', marginTop: 2 }}>
+            {label}
+          </Text>
+        </>
+      )}
     </View>
   );
 };
@@ -33,9 +54,9 @@ const MainTabs = () => (
       tabBarIcon: ({ focused }) => <TabIcon label={route.name} focused={focused} />,
       tabBarShowLabel: false,
       tabBarStyle: {
-        height: 70,
+        height: 72,
         paddingTop: 8,
-        paddingBottom: 12,
+        paddingBottom: 14,
         backgroundColor: '#fff',
         borderTopWidth: 1,
         borderTopColor: '#e5e7eb',
@@ -43,6 +64,8 @@ const MainTabs = () => (
     })}
   >
     <Tab.Screen name="Map" component={MapScreen} />
+    <Tab.Screen name="Services" component={EmergencyServicesScreen} />
+    <Tab.Screen name="SOS" component={SOSScreen} />
     <Tab.Screen name="Alerts" component={AlertsScreen} />
     <Tab.Screen name="Profile" component={ProfileScreen} />
   </Tab.Navigator>
@@ -61,7 +84,7 @@ const RootNavigator = () => {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#2563eb" />
+        <ActivityIndicator size="large" color="#fff" />
         <Text style={styles.loadingText}>Loading WanderMate...</Text>
       </View>
     );
