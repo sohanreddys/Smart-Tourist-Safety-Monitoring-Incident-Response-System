@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Alert, Vibration, Dimensions, Linking, Modal, Platform,
 } from 'react-native';
-import MapView, { Marker, Circle, PROVIDER_DEFAULT } from 'react-native-maps';
+import MapView, { Marker, Circle, Polygon, PROVIDER_DEFAULT } from 'react-native-maps';
 import * as Location from 'expo-location';
 import * as Network from 'expo-network';
 import { useAuth } from '../context/AuthContext';
@@ -133,9 +133,25 @@ const MapScreen = () => {
     try {
       const la = lat || location?.lat || 17.385;
       const ln = lng || location?.lng || 78.4867;
-      const res = await api.get('/location/nearby-services?lat=' + la + '&lng=' + ln);
-      setServices(res.data.services || []);
-    } catch (e) {}
+      // Live OSM/Google data grouped by type
+      const res = await api.get('/places/nearby', {
+        params: { lat: la, lng: ln, radius: 6000, limit: 10, types: 'hospital,police,fire,pharmacy' },
+      });
+      const grouped = res.data?.grouped || {};
+      const flat = [];
+      Object.keys(grouped).forEach((t) => grouped[t].forEach((s) => flat.push(s)));
+      if (flat.length > 0) {
+        setServices(flat);
+      } else {
+        const res2 = await api.get('/location/nearby-services?lat=' + la + '&lng=' + ln);
+        setServices(res2.data.services || []);
+      }
+    } catch (e) {
+      try {
+        const res2 = await api.get('/location/nearby-services?lat=' + (lat || location?.lat) + '&lng=' + (lng || location?.lng));
+        setServices(res2.data.services || []);
+      } catch (_) {}
+    }
   };
 
   const recenterToUser = (pos) => {
@@ -177,20 +193,33 @@ const MapScreen = () => {
         showsUserLocation showsMyLocationButton>
         {showZones && geofences.map((f) => {
           const isSel = selectedZone && selectedZone.id === f.id;
-          return (
-            <Circle key={f.id} center={{ latitude: f.lat, longitude: f.lng }} radius={f.radius}
-              strokeColor={f.riskLevel === 'high' ? '#ef4444' : f.riskLevel === 'medium' ? '#f59e0b' : '#3b82f6'}
-              fillColor={f.riskLevel === 'high' ? 'rgba(239,68,68,0.15)' : f.riskLevel === 'medium' ? 'rgba(245,158,11,0.15)' : 'rgba(59,130,246,0.15)'}
-              strokeWidth={isSel ? 5 : 2} />
-          );
+          const stroke = f.riskLevel === 'high' ? '#ef4444' : f.riskLevel === 'medium' ? '#f59e0b' : '#3b82f6';
+          const fill   = f.riskLevel === 'high' ? 'rgba(239,68,68,0.15)' : f.riskLevel === 'medium' ? 'rgba(245,158,11,0.15)' : 'rgba(59,130,246,0.15)';
+          if (f.shape === 'polygon' && Array.isArray(f.polygon) && f.polygon.length >= 3) {
+            return (
+              <Polygon key={f.id}
+                coordinates={f.polygon.map(p => ({ latitude: p.lat, longitude: p.lng }))}
+                strokeColor={stroke} fillColor={fill} strokeWidth={isSel ? 5 : 2} />
+            );
+          }
+          if (f.lat != null && f.lng != null && f.radius) {
+            return (
+              <Circle key={f.id} center={{ latitude: f.lat, longitude: f.lng }} radius={f.radius}
+                strokeColor={stroke} fillColor={fill} strokeWidth={isSel ? 5 : 2} />
+            );
+          }
+          return null;
         })}
         {showZones && geofences.map((f) => {
           const isSel = selectedZone && selectedZone.id === f.id;
+          const mLat = f.centroidLat ?? f.lat;
+          const mLng = f.centroidLng ?? f.lng;
+          if (mLat == null || mLng == null) return null;
           return (
-            <Marker key={'label-' + f.id} coordinate={{ latitude: f.lat, longitude: f.lng }}
+            <Marker key={'label-' + f.id} coordinate={{ latitude: mLat, longitude: mLng }}
               title={f.name} description={f.riskLevel + ' risk — ' + f.description}
               pinColor={f.riskLevel === 'high' ? 'red' : f.riskLevel === 'medium' ? 'orange' : 'blue'}
-              onPress={() => { setSelectedZone(f); zoomToItem(f.lat, f.lng); }}>
+              onPress={() => { setSelectedZone(f); zoomToItem(mLat, mLng); }}>
               <View style={[styles.marker, styles.markerZone, isSel && styles.markerBig,
                 f.riskLevel === 'high' && { backgroundColor: '#dc2626' },
                 f.riskLevel === 'medium' && { backgroundColor: '#d97706' }]}>

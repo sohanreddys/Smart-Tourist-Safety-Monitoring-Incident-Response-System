@@ -25,6 +25,7 @@ app.use('/api/geofence', require('./routes/geofence'));
 app.use('/api/blockchain', require('./routes/blockchain'));
 app.use('/api/anomaly', require('./routes/anomaly'));
 app.use('/api/evidence', require('./routes/evidence'));
+app.use('/api/places', require('./routes/places'));
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'WanderMate API running', timestamp: new Date().toISOString() });

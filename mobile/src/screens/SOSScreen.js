@@ -26,6 +26,7 @@ const SOSScreen = () => {
   const recordingLoopRef = useRef(false);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const sirenSoundRef = useRef(null);
+  const cameraFacingRef = useRef('back');
 
   const [sosMode, setSosMode] = useState('loud'); // 'loud' or 'silent'
   const [sirenPlaying, setSirenPlaying] = useState(false);
@@ -294,7 +295,7 @@ const SOSScreen = () => {
         setClipCount(clipIndexRef.current);
 
         // Serialize uploads so we don't flood the network on Android
-        await uploadClip(alertId, video.uri, cameraFacing, clipIndexRef.current);
+        await uploadClip(alertId, video.uri, cameraFacingRef.current, clipIndexRef.current);
 
         // NOTE: camera is no longer auto-switched. User uses the manual
         // FRONT/REAR toggle button on the overlay to change cameras.
@@ -309,8 +310,12 @@ const SOSScreen = () => {
   const uploadClip = async (alertId, uri, camFacing, index) => {
     const attemptUpload = async () => {
       const formData = new FormData();
-      // iOS sometimes emits file:// URIs with extra characters — normalize
-      const cleanUri = Platform.OS === 'ios' ? uri.replace('file://', '') : uri;
+      // iOS REQUIRES the file:// prefix on FormData URIs; Android also accepts it.
+      // Previously we were stripping it on iOS which caused uploads to silently fail.
+      let cleanUri = uri;
+      if (Platform.OS === 'ios' && !cleanUri.startsWith('file://')) {
+        cleanUri = 'file://' + cleanUri;
+      }
       formData.append('file', {
         uri: cleanUri,
         name: 'clip_' + index + '.mp4',
@@ -450,7 +455,11 @@ const SOSScreen = () => {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.actionBtn}
-              onPress={() => setCameraFacing(prev => prev === 'back' ? 'front' : 'back')}
+              onPress={() => setCameraFacing(prev => {
+                const next = prev === 'back' ? 'front' : 'back';
+                cameraFacingRef.current = next;
+                return next;
+              })}
             >
               <Text style={styles.actionBtnText}>
                 🔄 {cameraFacing === 'back' ? 'FRONT CAM' : 'REAR CAM'}

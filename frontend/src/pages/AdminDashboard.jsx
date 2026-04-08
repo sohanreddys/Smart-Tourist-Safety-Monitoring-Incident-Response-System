@@ -11,6 +11,10 @@ const AdminDashboard = () => {
   const mapInstance = useRef(null);
   const userMarkersRef = useRef({});
   const geofenceCirclesRef = useRef([]);
+  const pickerMapRef = useRef(null);
+  const pickerMapInstance = useRef(null);
+  const pickerMarkerRef = useRef(null);
+  const newFenceRef = useRef(null);
   const [alerts, setAlerts] = useState([]);
   const [liveAlerts, setLiveAlerts] = useState([]);
   const [onlineUsers, setOnlineUsers] = useState([]);
@@ -19,7 +23,8 @@ const AdminDashboard = () => {
   const [chainValid, setChainValid] = useState(null);
   const [stats, setStats] = useState({ totalAlerts: 0, active: 0, resolved: 0, users: 0 });
   const [activeTab, setActiveTab] = useState('overview');
-  const [newFence, setNewFence] = useState({ name: '', lat: '', lng: '', radius: 500, riskLevel: 'medium', description: '' });
+  const [newFence, setNewFence] = useState({ name: '', shape: 'circle', lat: '', lng: '', radius: 500, polygon: null, riskLevel: 'medium', category: '', description: '' });
+  const drawnPolygonRef = useRef(null);
   const [selectedAlert, setSelectedAlert] = useState(null);
   const [alertEvidence, setAlertEvidence] = useState([]);
   const selectedAlertRef = useRef(null);
@@ -213,10 +218,22 @@ const AdminDashboard = () => {
   const createGeofence = async (e) => {
     e.preventDefault();
     try {
-      await api.post('/geofence', newFence);
-      setNewFence({ name: '', lat: '', lng: '', radius: 500, riskLevel: 'medium', description: '' });
+      const payload = { ...newFence };
+      if (payload.shape === 'polygon') {
+        if (!Array.isArray(payload.polygon) || payload.polygon.length < 3) {
+          alert('Draw a polygon or rectangle on the map first.');
+          return;
+        }
+      } else {
+        if (!payload.lat || !payload.lng || !payload.radius) {
+          alert('Pick a location and set a radius, or draw a shape on the map.');
+          return;
+        }
+      }
+      await api.post('/geofence', payload);
+      setNewFence({ name: '', shape: 'circle', lat: '', lng: '', radius: 500, polygon: null, riskLevel: 'medium', category: '', description: '' });
       loadGeofences();
-    } catch (e) {}
+    } catch (err) { alert('Failed to create: ' + (err.response?.data?.error || err.message)); }
   };
 
   const deleteGeofence = async (id) => {
@@ -230,12 +247,135 @@ const AdminDashboard = () => {
     geofenceCirclesRef.current = [];
     fences.forEach((f) => {
       const color = f.riskLevel === 'high' ? '#ef4444' : f.riskLevel === 'medium' ? '#f59e0b' : '#3b82f6';
-      const circle = L.circle([f.lat, f.lng], { radius: f.radius, color, fillColor: color, fillOpacity: 0.15, weight: 2 })
-        .addTo(mapInstance.current);
-      circle.bindPopup('<b>' + f.name + '</b><br>Risk: ' + f.riskLevel);
-      geofenceCirclesRef.current.push(circle);
+      let layer;
+      if (f.shape === 'polygon' && Array.isArray(f.polygon) && f.polygon.length >= 3) {
+        layer = L.polygon(f.polygon.map(p => [p.lat, p.lng]), { color, fillColor: color, fillOpacity: 0.15, weight: 2 })
+          .addTo(mapInstance.current);
+      } else if (f.lat != null && f.lng != null && f.radius) {
+        layer = L.circle([f.lat, f.lng], { radius: f.radius, color, fillColor: color, fillOpacity: 0.15, weight: 2 })
+          .addTo(mapInstance.current);
+      }
+      if (layer) {
+        layer.bindPopup('<b>' + f.name + '</b><br>Risk: ' + f.riskLevel + (f.category ? '<br>Type: ' + f.category : ''));
+        geofenceCirclesRef.current.push(layer);
+      }
     });
   };
+
+  // Keep a ref in sync so Leaflet click handlers can update newFence without stale closures
+  useEffect(() => { newFenceRef.current = newFence; }, [newFence]);
+
+  // Pin-picker map for Geofence Management
+  useEffect(() => {
+    if (activeTab !== 'geofences') return;
+    if (!pickerMapRef.current) return;
+    const L = window.L;
+    if (!L) return;
+    if (pickerMapInstance.current) {
+      pickerMapInstance.current.remove();
+      pickerMapInstance.current = null;
+    }
+    const map = L.map(pickerMapRef.current).setView([17.385, 78.4867], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors',
+    }).addTo(map);
+
+    // Render existing geofences for context (polygons AND circles)
+    setTimeout(() => {
+      map.invalidateSize();
+      geofences.forEach((f) => {
+        const color = f.riskLevel === 'high' ? '#ef4444' : f.riskLevel === 'medium' ? '#f59e0b' : '#3b82f6';
+        if (f.shape === 'polygon' && Array.isArray(f.polygon) && f.polygon.length >= 3) {
+          L.polygon(f.polygon.map(p => [p.lat, p.lng]), { color, fillColor: color, fillOpacity: 0.1, weight: 1 })
+            .addTo(map).bindTooltip(f.name);
+        } else if (f.lat != null && f.lng != null && f.radius) {
+          L.circle([f.lat, f.lng], { radius: f.radius, color, fillColor: color, fillOpacity: 0.1, weight: 1 })
+            .addTo(map).bindTooltip(f.name);
+        }
+      });
+    }, 100);
+
+    // Leaflet.draw: editable FeatureGroup + polygon/circle toolbar
+    const drawnItems = new L.FeatureGroup();
+    map.addLayer(drawnItems);
+    if (L.Control && L.Control.Draw) {
+      const drawControl = new L.Control.Draw({
+        position: 'topright',
+        draw: {
+          polygon: { allowIntersection: false, showArea: true, shapeOptions: { color: '#dc2626' } },
+          rectangle: { shapeOptions: { color: '#dc2626' } },
+          circle: { shapeOptions: { color: '#dc2626' } },
+          marker: false, polyline: false, circlemarker: false,
+        },
+        edit: { featureGroup: drawnItems, remove: true },
+      });
+      map.addControl(drawControl);
+      map.on(L.Draw.Event.CREATED, (e) => {
+        drawnItems.clearLayers();
+        drawnItems.addLayer(e.layer);
+        drawnPolygonRef.current = e.layer;
+        const type = e.layerType;
+        if (type === 'polygon' || type === 'rectangle') {
+          const latlngs = e.layer.getLatLngs()[0];
+          const poly = latlngs.map(ll => ({ lat: ll.lat, lng: ll.lng }));
+          setNewFence({ ...(newFenceRef.current || {}), shape: 'polygon', polygon: poly, lat: '', lng: '', radius: 0 });
+        } else if (type === 'circle') {
+          const c = e.layer.getLatLng();
+          setNewFence({
+            ...(newFenceRef.current || {}),
+            shape: 'circle',
+            lat: c.lat.toFixed(6),
+            lng: c.lng.toFixed(6),
+            radius: Math.round(e.layer.getRadius()),
+            polygon: null,
+          });
+        }
+      });
+      map.on(L.Draw.Event.EDITED, (e) => {
+        e.layers.eachLayer((layer) => {
+          if (layer.getLatLngs) {
+            const latlngs = layer.getLatLngs()[0];
+            const poly = latlngs.map(ll => ({ lat: ll.lat, lng: ll.lng }));
+            setNewFence({ ...(newFenceRef.current || {}), shape: 'polygon', polygon: poly });
+          } else if (layer.getLatLng && layer.getRadius) {
+            const c = layer.getLatLng();
+            setNewFence({
+              ...(newFenceRef.current || {}),
+              shape: 'circle',
+              lat: c.lat.toFixed(6), lng: c.lng.toFixed(6),
+              radius: Math.round(layer.getRadius()),
+            });
+          }
+        });
+      });
+      map.on(L.Draw.Event.DELETED, () => {
+        drawnPolygonRef.current = null;
+        setNewFence({ ...(newFenceRef.current || {}), polygon: null });
+      });
+    }
+
+    map.on('click', (e) => {
+      // Only drop a point marker when not in the middle of a draw
+      if (drawnItems.getLayers().length > 0) return;
+      const { lat, lng } = e.latlng;
+      if (pickerMarkerRef.current) {
+        pickerMarkerRef.current.setLatLng([lat, lng]);
+      } else {
+        pickerMarkerRef.current = L.marker([lat, lng], { draggable: true }).addTo(map);
+        pickerMarkerRef.current.on('dragend', (ev) => {
+          const p = ev.target.getLatLng();
+          setNewFence({ ...(newFenceRef.current || {}), lat: p.lat.toFixed(6), lng: p.lng.toFixed(6) });
+        });
+      }
+      setNewFence({ ...(newFenceRef.current || {}), lat: lat.toFixed(6), lng: lng.toFixed(6) });
+    });
+
+    pickerMapInstance.current = map;
+    return () => {
+      if (pickerMapInstance.current) { pickerMapInstance.current.remove(); pickerMapInstance.current = null; }
+      pickerMarkerRef.current = null;
+    };
+  }, [activeTab, geofences]);
 
   useEffect(() => {
     loadAlerts();
@@ -600,6 +740,18 @@ const AdminDashboard = () => {
         {activeTab === 'geofences' && (
           <div>
             <h2 className="text-lg font-bold text-gray-800 mb-4">Geofence Management</h2>
+            <div className="bg-white p-4 rounded-xl border shadow-sm mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="font-bold text-gray-700">📍 Draw or Pick on Map</h3>
+                <span className="text-xs text-gray-500">Use the toolbar to draw a polygon/rectangle/circle — or click to drop a pin</span>
+              </div>
+              <div ref={pickerMapRef} style={{ height: '420px', width: '100%', borderRadius: '10px', overflow: 'hidden' }} />
+              <p className="text-xs text-gray-600 mt-2">
+                Shape: <span className="font-mono font-bold">{newFence.shape}</span>
+                {newFence.shape === 'polygon' && newFence.polygon ? ' · ' + newFence.polygon.length + ' vertices' : ''}
+                {newFence.shape === 'circle' && newFence.lat && newFence.lng ? ' · ' + newFence.lat + ', ' + newFence.lng + ' · r=' + newFence.radius + 'm' : ''}
+              </p>
+            </div>
             <form onSubmit={createGeofence} className="bg-white p-4 rounded-xl border shadow-sm mb-6">
               <h3 className="font-bold text-gray-700 mb-3">Create New Geofence</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">

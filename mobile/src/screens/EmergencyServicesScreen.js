@@ -59,13 +59,33 @@ const EmergencyServicesScreen = () => {
   const loadServices = async (lat, lng) => {
     setLoading(true);
     try {
-      const res = await api.get('/location/nearby-services?lat=' + lat + '&lng=' + lng);
-      const svcs = res.data.services || [];
-      setAllServices(svcs);
-      setServices(svcs);
-      setHelplines(res.data.nationalHelplines || NATIONAL_HELPLINES);
+      // Live OSM/Google data — returns { grouped: { hospital: [...], police: [...], fire: [...], pharmacy: [...] } }
+      const res = await api.get('/places/nearby', {
+        params: { lat, lng, radius: 8000, limit: 10, types: 'hospital,police,fire,pharmacy' },
+      });
+      const grouped = res.data.grouped || {};
+      // Flatten for the "all" view and attach distance label
+      const flat = [];
+      Object.keys(grouped).forEach((type) => {
+        grouped[type].forEach((s) => {
+          flat.push({
+            ...s,
+            distance: s.distance != null ? (s.distance >= 1000 ? (s.distance / 1000).toFixed(1) + ' km' : s.distance + ' m') : '',
+            phone: s.phone || (type === 'hospital' ? '108' : type === 'police' ? '100' : type === 'fire' ? '101' : '112'),
+          });
+        });
+      });
+      setAllServices(flat);
+      setServices(flat);
+      setHelplines(NATIONAL_HELPLINES);
     } catch (e) {
-      // Use national helplines even if API fails
+      console.log('places fetch failed, fallback:', e.message);
+      try {
+        const res2 = await api.get('/location/nearby-services?lat=' + lat + '&lng=' + lng);
+        const svcs = res2.data.services || [];
+        setAllServices(svcs);
+        setServices(svcs);
+      } catch (e2) {}
       setHelplines(NATIONAL_HELPLINES);
     }
     setLoading(false);
